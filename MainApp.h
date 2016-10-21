@@ -18,19 +18,20 @@ class MainApp: public QMainWindow
     public:
         explicit MainApp(int argc, char* argv[]);
         ~MainApp();
-        int CheckApi();
+        int CheckGeniviApi();
         int AuthenticatePOI(const QString & CredentialsFile);
         int StartMonitoringUserInput();
 
     private:
         void ParseJsonBusinessList(const char* buf, std::vector<Business> & Output);
         bool eventFilter(QObject *obj, QEvent *ev);
+        void Expand(bool expand);
     
         uint32_t navicoreSession;
         QMutex mutex;
         GeniviWrapper wrapper;
         QWidget window;
-        QHBoxLayout layout;
+        QVBoxLayout layout;
         QLineEdit lineEdit;
         QString token;
         QNetworkAccessManager networkManager;

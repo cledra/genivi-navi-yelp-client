@@ -32,9 +32,8 @@ using namespace std;
 
 MainApp::MainApp(int argc, char* argv[]):
     navicoreSession(0),mutex(),wrapper(),window(Q_NULLPTR, Qt::FramelessWindowHint),layout(&window),
-    lineEdit(&window),token(""),networkManager(this),pSearchReply(NULL),pResultList(new QTreeWidget)
+    lineEdit(&window),token(""),networkManager(this),pSearchReply(NULL),pResultList(new QTreeWidget(&window))
 {
-    window.setGeometry(140, (1080-WIDGET_WIDTH)/2, WIDGET_WIDTH, -1);
     window.setStyleSheet("background-color: rgba(235, 235, 235);");
     window.setAttribute(Qt::WA_TranslucentBackground);
 
@@ -42,16 +41,12 @@ MainApp::MainApp(int argc, char* argv[]):
     QFont font = lineEdit.font();
     font.setPointSize(FONT_SIZE_LINEDIT);
     lineEdit.setFont(font);
-    
-    layout.addWidget(&lineEdit, 0, Qt::AlignTop);
+
     window.setLayout(&layout);
 
-    window.show();
-
-    pResultList->setWindowFlags(Qt::Popup);
-    pResultList->setFocusPolicy(Qt::NoFocus);
-    pResultList->setFocusProxy(&lineEdit);
-    pResultList->setMouseTracking(true);
+    //lineEdit.setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
+    
+    layout.addWidget(&lineEdit, 0, Qt::AlignTop);
 
     pResultList->setColumnCount(2);
     pResultList->setUniformRowHeights(true);
@@ -60,23 +55,54 @@ MainApp::MainApp(int argc, char* argv[]):
     pResultList->setSelectionBehavior(QTreeWidget::SelectRows);
     pResultList->setFrameStyle(QFrame::Box | QFrame::Plain);
     pResultList->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+    pResultList->setVerticalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
     pResultList->header()->hide();
-
-    font = pResultList->font();
-    font.setPointSize(FONT_SIZE_LIST);
     pResultList->setFont(font);
-
     pResultList->installEventFilter(this);
+    
+    Expand(false);
+
+    layout.addWidget(pResultList, 0, Qt::AlignTop);
+
+    window.show();
 }
 
 MainApp::~MainApp()
 {
-    // TODO: stop running requests...
-
     mutex.lock();
     delete pSearchReply;
     delete pResultList;
     mutex.unlock();
+}
+
+void MainApp::Expand(bool expand)
+{
+    if (expand)
+    {
+        /* Make space to display the QLineEdit + the result list : */
+        
+        int h = pResultList->sizeHintForRow(0) * (Businesses.size() + 1);
+        window.setGeometry(window.pos().x(), window.pos().y(), WIDGET_WIDTH, lineEdit.height() + h + 10);
+
+        pResultList->show();
+
+        pResultList->setCurrentItem(pResultList->topLevelItem(0));
+        pResultList->resize(lineEdit.width(), h);
+        
+        pResultList->move(QPoint(lineEdit.pos().x(), lineEdit.pos().y() + lineEdit.height()));
+        pResultList->setColumnWidth(0, pResultList->width() / 2);
+        pResultList->setColumnWidth(1, pResultList->width() / 2);
+        pResultList->setFocus();
+    }
+    else
+    {
+        /* Shrink space to only display the QLineEdit field : */
+        
+        pResultList->clear();
+        pResultList->hide();
+        window.setGeometry(window.pos().x(), window.pos().y(), WIDGET_WIDTH, -1);
+        lineEdit.setFocus();
+    }
 }
 
 void MainApp::textChanged(const QString & text)
@@ -85,11 +111,23 @@ void MainApp::textChanged(const QString & text)
 
     TRACE_INFO("New text is: %s", qPrintable(text));
 
+    mutex.lock();
+
+	delete pSearchReply;    /* cancel current search */
+    pSearchReply = NULL;
+
+    /* if empty text -> no search */
+    if (text.length() == 0)
+    {
+        Expand(false);          /* shrink display to minimum */
+        mutex.unlock();
+        return;
+    }
+
     /* we need to know our current position : */
     std::vector<int32_t> Params;
     Params.push_back(NAVICORE_LONGITUDE);
     Params.push_back(NAVICORE_LATITUDE);
-
     std::map< int32_t, variant > Ret = wrapper.NavicoreGetPosition(Params);
     std::map< int32_t, variant >::iterator it;
     for (it = Ret.begin(); it != Ret.end(); it++)
@@ -100,7 +138,6 @@ void MainApp::textChanged(const QString & text)
             current_longitude = it->second._double;
     }
 
-    //cout << "Current position: " << current_latitude << ", " << current_longitude << endl;
     TRACE_INFO("Current position: %f, %f", current_latitude, current_longitude);
 
     /* let's generate a search request : */
@@ -108,19 +145,14 @@ void MainApp::textChanged(const QString & text)
         QString("&latitude=") + QString::number(current_latitude) +
         QString("&longitude=") + QString::number(current_longitude);
 
-    //cout << "MyUrl: " << qPrintable(myUrlStr) << endl;
     TRACE_DEBUG("URL: %s", qPrintable(myUrlStr));
 
     QUrl myUrl = QUrl(myUrlStr);
     QNetworkRequest req(myUrl);
     req.setRawHeader("Authorization", (QString("bearer ") + token).toLocal8Bit());
-
-    mutex.lock();
-    
-    // only the last pSearchReply is interesting for us:
-    delete pSearchReply;
     pSearchReply = networkManager.get(req);
     TRACE_DEBUG("after post, reply is %p", pSearchReply);
+    
     mutex.unlock();
 }
 
@@ -129,7 +161,7 @@ void MainApp::ParseJsonBusinessList(const char* buf, std::vector<Business> & Out
     json_object *jobj = json_tokener_parse(buf);
     if (!jobj)
     {
-        cerr << "json_tokener_parse failed" << endl;
+        TRACE_ERROR("json_tokener_parse failed");
         return;
     }
 
@@ -284,9 +316,10 @@ bool MainApp::eventFilter(QObject *obj, QEvent *ev)
         return false;
     }
 
+    TRACE_DEBUG("ev->type() = %d", (int)ev->type());
+
     if (ev->type() == QEvent::MouseButtonPress) {
-        pResultList->hide();
-        lineEdit.setFocus();
+        Expand(false);
         TRACE_DEBUG("mouse button");
         return true;
     }
@@ -305,8 +338,7 @@ bool MainApp::eventFilter(QObject *obj, QEvent *ev)
 
             case Qt::Key_Escape:
                 TRACE_DEBUG("escape");
-                lineEdit.setFocus();
-                pResultList->hide();
+                Expand(false);
                 consumed = true;
 
             case Qt::Key_Up:
@@ -320,9 +352,8 @@ bool MainApp::eventFilter(QObject *obj, QEvent *ev)
 
             default:
                 TRACE_DEBUG("default");
-                lineEdit.setFocus();
                 lineEdit.event(ev);
-                pResultList->hide();
+                Expand(false);
                 break;
         }
 
@@ -355,18 +386,6 @@ void MainApp::networkReplySearch(QNetworkReply* reply)
 
     pResultList->clear();
 
-    /*connect(pResultList, SIGNAL(itemClicked(QTreeWidgetItem*,int)),
-            SLOT(doneCompletion()));*/
-
-    /*timer = new QTimer(this);
-    timer->setSingleShot(true);
-    timer->setInterval(500);
-    connect(timer, SIGNAL(timeout()), SLOT(autoSuggest()));
-    connect(editor, SIGNAL(textEdited(QString)), timer, SLOT(start()));
-
-    connect(&networkManager, SIGNAL(finished(QNetworkReply*)),
-            this, SLOT(handleNetworkData(QNetworkReply*)));*/
-
     const QPalette &pal = lineEdit.palette();
     QColor color = pal.color(QPalette::Disabled, QPalette::WindowText);
 
@@ -381,23 +400,15 @@ void MainApp::networkReplySearch(QNetworkReply* reply)
         item->setTextColor(1, color);
     }
 
-    pResultList->setCurrentItem(pResultList->topLevelItem(0));
-    pResultList->resizeColumnToContents(0);
-    pResultList->resizeColumnToContents(1);
-    pResultList->adjustSize();
+    //pResultList->setCurrentItem(pResultList->topLevelItem(0));
     pResultList->setUpdatesEnabled(true);
 
-    int h = pResultList->sizeHintForRow(0) * (Businesses.size() + 1);
-    pResultList->resize(lineEdit.width(), h);
-
-    pResultList->move(lineEdit.mapToGlobal(QPoint(0, lineEdit.height())));
-    pResultList->setFocus();
-    pResultList->show();
+    Expand(true);
 
     mutex.unlock();
 }
 
-int MainApp::CheckApi()
+int MainApp::CheckGeniviApi()
 {
     map<uint32_t, std::string> NcSessions = wrapper.NavicoreGetAllSessions();
     if (NcSessions.empty())
@@ -451,7 +462,6 @@ int MainApp::AuthenticatePOI(const QString & CredentialsFile)
 
     fclose(filep);
 
-    //cout << "Found credentials: " << qPrintable(AppId) << ", " << qPrintable(AppSecret) << endl;
     TRACE_INFO("Found credentials");
 
     /* Then, send a HTTP request to get the token and wait for answer (synchronously): */
@@ -493,7 +503,6 @@ int MainApp::AuthenticatePOI(const QString & CredentialsFile)
             if (json_object_get_type(val) == json_type_string)
             {
                 json_object *value;
-
                 if(json_object_object_get_ex(jobj, "access_token", &value))
                 {
                     TRACE_INFO("token was found");
@@ -503,6 +512,8 @@ int MainApp::AuthenticatePOI(const QString & CredentialsFile)
                 }
             }
         }
+
+        free(jobj);
     }
     else
     {

@@ -30,6 +30,7 @@ int main(int argc, char *argv[])
     MainApp mainapp(argc, argv);
     QString credentialsFile(DEFAULT_CREDENTIALS_FILE);
 
+    /* first, parse options : */
     while ((opt = getopt_long(argc, argv, "c:h", long_options, NULL)) != -1)
     {
         switch (opt)
@@ -44,8 +45,8 @@ int main(int argc, char *argv[])
         }
     }
     
-    /* check that Genivi API is available: */
-    if (mainapp.CheckApi() < 0)
+    /* then, check that Genivi API is available: */
+    if (mainapp.CheckGeniviApi() < 0)
         return -1;
 
     /* then, authenticate connexion to POI service: */
