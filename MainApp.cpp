@@ -31,8 +31,10 @@
 using namespace std;
 
 MainApp::MainApp(int argc, char* argv[]):
-    navicoreSession(0),mutex(),wrapper(),window(Q_NULLPTR, Qt::FramelessWindowHint),layout(&window),
-    lineEdit(&window),token(""),networkManager(this),pSearchReply(NULL),pResultList(new QTreeWidget(&window))
+    navicoreSession(0),mutex(),wrapper(),
+    window(Q_NULLPTR, Qt::FramelessWindowHint),layout(&window),
+    lineEdit(&window),token(""),networkManager(this),pSearchReply(NULL),
+    pResultList(new QTreeWidget(&window))
 {
     window.setStyleSheet("background-color: rgba(235, 235, 235);");
     window.setAttribute(Qt::WA_TranslucentBackground);
@@ -80,7 +82,7 @@ void MainApp::Expand(bool expand)
     if (expand)
     {
         /* Make space to display the QLineEdit + the result list : */
-        
+
         int h = pResultList->sizeHintForRow(0) * (Businesses.size() + 1);
         window.setGeometry(window.pos().x(), window.pos().y(), WIDGET_WIDTH, lineEdit.height() + h + 10);
 
@@ -97,7 +99,7 @@ void MainApp::Expand(bool expand)
     else
     {
         /* Shrink space to only display the QLineEdit field : */
-        
+
         pResultList->clear();
         pResultList->hide();
         window.setGeometry(window.pos().x(), window.pos().y(), WIDGET_WIDTH, -1);
@@ -107,7 +109,7 @@ void MainApp::Expand(bool expand)
 
 void MainApp::textChanged(const QString & text)
 {
-    double current_latitude, current_longitude;
+    double currentLatitude, currentLongitude;
 
     TRACE_INFO("New text is: %s", qPrintable(text));
 
@@ -116,10 +118,9 @@ void MainApp::textChanged(const QString & text)
 	delete pSearchReply;    /* cancel current search */
     pSearchReply = NULL;
 
-    /* if empty text -> no search */
-    if (text.length() == 0)
+    if (text.length() == 0) /* if empty text -> no search */
     {
-        Expand(false);          /* shrink display to minimum */
+        Expand(false);      /* shrink display to minimum */
         mutex.unlock();
         return;
     }
@@ -133,17 +134,17 @@ void MainApp::textChanged(const QString & text)
     for (it = Ret.begin(); it != Ret.end(); it++)
     {
         if (it->first == NAVICORE_LATITUDE)
-            current_latitude = it->second._double;
+            currentLatitude = it->second._double;
         else if (it->first == NAVICORE_LONGITUDE)
-            current_longitude = it->second._double;
+            currentLongitude = it->second._double;
     }
 
-    TRACE_INFO("Current position: %f, %f", current_latitude, current_longitude);
+    TRACE_INFO("Current position: %f, %f", currentLatitude, currentLongitude);
 
     /* let's generate a search request : */
     QString myUrlStr = URL_SEARCH + QString("?") + QString("term=") + text +
-        QString("&latitude=") + QString::number(current_latitude) +
-        QString("&longitude=") + QString::number(current_longitude);
+        QString("&latitude=") + QString::number(currentLatitude) +
+        QString("&longitude=") + QString::number(currentLongitude);
 
     TRACE_DEBUG("URL: %s", qPrintable(myUrlStr));
 
@@ -318,6 +319,12 @@ bool MainApp::eventFilter(QObject *obj, QEvent *ev)
 
     TRACE_DEBUG("ev->type() = %d", (int)ev->type());
 
+    if (ev->type() == QEvent::HideToParent)
+    {
+        /* that's no reason to select the text, is it ? */
+        lineEdit.deselect();
+    }
+
     if (ev->type() == QEvent::MouseButtonPress) {
         Expand(false);
         TRACE_DEBUG("mouse button");
@@ -333,7 +340,7 @@ bool MainApp::eventFilter(QObject *obj, QEvent *ev)
             case Qt::Key_Enter:
             case Qt::Key_Return:
                 TRACE_DEBUG("enter or return");
-                TRACE_WARN("entry selected");
+                SetDestination();
                 consumed = true;
 
             case Qt::Key_Escape:
@@ -361,6 +368,49 @@ bool MainApp::eventFilter(QObject *obj, QEvent *ev)
     }
 
     return false;
+}
+
+void MainApp::SetDestination()
+{
+    QList<QTreeWidgetItem *> SelectedItems = pResultList->selectedItems();
+    if (SelectedItems.size() <= 0)
+    {
+        TRACE_ERROR("no item is selected");
+        return;
+    }
+
+    /* select the first selected item : */
+    int index = pResultList->indexOfTopLevelItem(*SelectedItems.begin());
+    TRACE_DEBUG("index is: %d", index);
+
+    /* retrieve the coordinates of this item : */
+    double targetLatitude  = Businesses[index].Latitude;
+    double targetLongitude = Businesses[index].Longitude;
+
+    /* check if a route already exists, if not create it : */
+    uint32_t myRoute;
+    std::vector< uint32_t > allRoutes = wrapper.NavicoreGetAllRoutes();
+    if (allRoutes.size() == 0)
+    {
+        myRoute = wrapper.NavicoreCreateRoute(navicoreSession);
+        TRACE_INFO("Created route %" PRIu32, myRoute);
+    }
+    else
+    {
+        myRoute = allRoutes[0];
+        wrapper.NavicorePauseSimulation(navicoreSession);
+        wrapper.NavicoreSetSimulationMode(navicoreSession, false);
+        wrapper.NavicoreCancelRouteCalculation(navicoreSession, myRoute);
+        TRACE_INFO("Re-use route %" PRIu32, myRoute);
+    }
+
+    /* set the destination : */
+    Waypoint destWp(targetLatitude, targetLongitude);
+    std::vector<Waypoint> myWayPoints;
+    myWayPoints.push_back(destWp);
+    wrapper.NavicoreSetWaypoints(navicoreSession, myRoute, true, myWayPoints);
+
+    wrapper.NavicoreCalculateRoute(navicoreSession, myRoute);
 }
 
 void MainApp::networkReplySearch(QNetworkReply* reply)

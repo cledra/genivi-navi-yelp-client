@@ -26,6 +26,7 @@ class MainApp: public QMainWindow
         void ParseJsonBusinessList(const char* buf, std::vector<Business> & Output);
         bool eventFilter(QObject *obj, QEvent *ev);
         void Expand(bool expand);
+        void SetDestination();
     
         uint32_t navicoreSession;
         QMutex mutex;
