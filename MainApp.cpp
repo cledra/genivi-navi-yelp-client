@@ -8,6 +8,7 @@
 #include <iostream>
 #include <error.h>
 #include <json-c/json.h>
+#include <stdlib.h>
 
 #define __STDC_FORMAT_MACROS
 #include <inttypes.h>
@@ -77,6 +78,21 @@ MainApp::~MainApp()
     mutex.unlock();
 }
 
+void MainApp::UpdateAglSurfaces()
+{
+    char cmd[1024];
+
+    TRACE_DEBUG("handle AGL demo surfaces...");
+    snprintf(cmd, 1023, "/usr/bin/LayerManagerControl set surface $SURFACE_ID_CLIENT source region 0 0 %d %d",
+        window.width(), window.height());
+    TRACE_DEBUG("%s", cmd);
+    system(cmd);
+    snprintf(cmd, 1023, "/usr/bin/LayerManagerControl set surface $SURFACE_ID_CLIENT destination region $CLIENT_X $CLIENT_Y %d %d",
+        window.width(), window.height());
+    TRACE_DEBUG("%s", cmd);
+    system(cmd);
+}
+
 void MainApp::Expand(bool expand)
 {
     if (expand)
@@ -105,6 +121,12 @@ void MainApp::Expand(bool expand)
         window.setGeometry(window.pos().x(), window.pos().y(), WIDGET_WIDTH, -1);
         lineEdit.setFocus();
     }
+
+    if (getenv("AGL_NAVI"))
+    {
+        QTimer timer(this);
+        timer.singleShot(0, this, SLOT(UpdateAglSurfaces()));
+    }
 }
 
 void MainApp::textChanged(const QString & text)
@@ -115,7 +137,7 @@ void MainApp::textChanged(const QString & text)
 
     mutex.lock();
 
-	delete pSearchReply;    /* cancel current search */
+    delete pSearchReply;    /* cancel current search */
     pSearchReply = NULL;
 
     if (text.length() == 0) /* if empty text -> no search */

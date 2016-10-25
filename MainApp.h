@@ -27,7 +27,7 @@ class MainApp: public QMainWindow
         bool eventFilter(QObject *obj, QEvent *ev);
         void Expand(bool expand);
         void SetDestination();
-    
+
         uint32_t navicoreSession;
         QMutex mutex;
         GeniviWrapper wrapper;
@@ -43,6 +43,7 @@ class MainApp: public QMainWindow
     private slots:
         void textChanged(const QString & text);
         void networkReplySearch(QNetworkReply* reply);
+        void UpdateAglSurfaces();
 };
 
 #endif // __MAINAPP_H__
