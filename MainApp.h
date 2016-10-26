@@ -10,6 +10,7 @@
 #include <vector>
 #include "libgeniviwrapper/GeniviWrapper.h"
 #include "Business.h"
+#include "InfoPanel.h"
 
 class MainApp: public QMainWindow
 {
@@ -39,14 +40,8 @@ class MainApp: public QMainWindow
         QNetworkAccessManager networkManager;
         QNetworkReply *pSearchReply;
         QTreeWidget *pResultList;
-
-        QLabel *nameLabel;
-        QLabel *imageLabel;
-        QLabel *addressLabel;
-        QLabel *imgRatingLabel;
-        QLabel *nbReviewsLabel;
-        
         std::vector<Business> Businesses;
+        InfoPanel *infoPanel;
 
     private slots:
         void textChanged(const QString & text);
