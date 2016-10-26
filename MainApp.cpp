@@ -644,3 +644,18 @@ int MainApp::StartMonitoringUserInput()
     connect(&networkManager, SIGNAL(finished(QNetworkReply*)), this, SLOT(networkReplySearch(QNetworkReply*)));
     return 1;
 }
+
+void MainApp::cancelClicked()
+{
+    TRACE_WARN("cancel clicked !");
+    DisplayInformation(false);
+    Expand(false);
+    TRACE_WARN("done");
+}
+
+void MainApp::goClicked()
+{
+    TRACE_WARN("go clicked !");
+
+    TRACE_WARN("done");
+}

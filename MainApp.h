@@ -47,6 +47,8 @@ class MainApp: public QMainWindow
         void textChanged(const QString & text);
         void networkReplySearch(QNetworkReply* reply);
         void UpdateAglSurfaces();
+        void cancelClicked();
+        void goClicked();
 };
 
 #endif // __MAINAPP_H__
