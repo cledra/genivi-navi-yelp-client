@@ -5,6 +5,7 @@
 #include <QUrl>
 #include <QUrlQuery>
 #include <QTreeWidget>
+#include <QPixmap>
 #include <iostream>
 #include <error.h>
 #include <json-c/json.h>
@@ -34,8 +35,9 @@ using namespace std;
 MainApp::MainApp(int argc, char* argv[]):
     navicoreSession(0),mutex(),wrapper(),
     window(Q_NULLPTR, Qt::FramelessWindowHint),layout(&window),
-    lineEdit(&window),token(""),networkManager(this),pSearchReply(NULL),
-    pResultList(new QTreeWidget(&window))
+    lineEdit(&window),nameLabel(NULL),addressLabel(NULL),imageLabel(NULL),
+    imgRatingLabel(NULL),nbReviewsLabel(NULL),token(""),networkManager(this),
+    pSearchReply(NULL),pResultList(new QTreeWidget(&window))
 {
     window.setStyleSheet("background-color: rgba(235, 235, 235);");
     window.setAttribute(Qt::WA_TranslucentBackground);
@@ -46,9 +48,6 @@ MainApp::MainApp(int argc, char* argv[]):
     lineEdit.setFont(font);
 
     window.setLayout(&layout);
-
-    //lineEdit.setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
-    
     layout.addWidget(&lineEdit, 0, Qt::AlignTop);
 
     pResultList->setColumnCount(2);
@@ -65,8 +64,6 @@ MainApp::MainApp(int argc, char* argv[]):
     
     Expand(false);
 
-    layout.addWidget(pResultList, 0, Qt::AlignTop);
-
     window.show();
 }
 
@@ -75,6 +72,10 @@ MainApp::~MainApp()
     mutex.lock();
     delete pSearchReply;
     delete pResultList;
+    delete nameLabel;
+    delete imageLabel;
+    delete addressLabel;
+    delete nbReviewsLabel;
     mutex.unlock();
 }
 
@@ -102,6 +103,7 @@ void MainApp::Expand(bool expand)
         int h = pResultList->sizeHintForRow(0) * (Businesses.size() + 1);
         window.setGeometry(window.pos().x(), window.pos().y(), WIDGET_WIDTH, lineEdit.height() + h + 10);
 
+        layout.addWidget(pResultList, 0, Qt::AlignTop);
         pResultList->show();
 
         pResultList->setCurrentItem(pResultList->topLevelItem(0));
@@ -118,6 +120,7 @@ void MainApp::Expand(bool expand)
 
         pResultList->clear();
         pResultList->hide();
+        layout.removeWidget(pResultList);
         window.setGeometry(window.pos().x(), window.pos().y(), WIDGET_WIDTH, -1);
         lineEdit.setFocus();
     }
@@ -132,6 +135,8 @@ void MainApp::Expand(bool expand)
 void MainApp::textChanged(const QString & text)
 {
     double currentLatitude, currentLongitude;
+
+    DisplayInformation(false);
 
     TRACE_INFO("New text is: %s", qPrintable(text));
 
@@ -362,8 +367,13 @@ bool MainApp::eventFilter(QObject *obj, QEvent *ev)
             case Qt::Key_Enter:
             case Qt::Key_Return:
                 TRACE_DEBUG("enter or return");
-                SetDestination();
+                //SetDestination();
                 consumed = true;
+
+                /**/
+                DisplayInformation();
+                break;
+                /**/
 
             case Qt::Key_Escape:
                 TRACE_DEBUG("escape");
@@ -435,6 +445,108 @@ void MainApp::SetDestination()
     wrapper.NavicoreCalculateRoute(navicoreSession, myRoute);
 }
 
+void MainApp::DisplayInformation(bool display)
+{
+    if (display)
+    {
+        QList<QTreeWidgetItem *> SelectedItems = pResultList->selectedItems();
+        if (SelectedItems.size() <= 0)
+        {
+            TRACE_ERROR("no item is selected");
+            return;
+        }
+
+        /* select the first selected item : */
+        int index = pResultList->indexOfTopLevelItem(*SelectedItems.begin());
+        TRACE_DEBUG("index is: %d", index);
+
+        /* Resize window: */
+        Expand(false);
+        window.setGeometry(window.pos().x(), window.pos().y(), WIDGET_WIDTH, WIDGET_WIDTH);
+
+        /* Display Name: */
+        nameLabel = new QLabel(&window);
+        nameLabel->setText(Businesses[index].Name);
+        layout.addWidget(nameLabel);
+        layout.setAlignment(nameLabel, Qt::AlignTop | Qt::AlignHCenter);
+
+        /* Display Address: */
+        addressLabel = new QLabel(&window);
+        addressLabel->setText(Businesses[index].Address);
+        layout.addWidget(addressLabel);
+        layout.setAlignment(addressLabel, Qt::AlignTop | Qt::AlignHCenter);
+
+        /* Image Url: */
+        TRACE_INFO("Image URL: %s", qPrintable(Businesses[index].ImageUrl));
+
+        imageLabel = new QLabel(&window);
+        //imageLabel->setBackgroundRole(QPalette::Base);
+        //imageLabel->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Ignored);
+        //imageLabel->setScaledContents(true);
+        QEventLoop eventLoop;
+        QObject::connect(&networkManager, SIGNAL(finished(QNetworkReply*)), &eventLoop, SLOT(quit()));
+        QNetworkRequest req(QUrl(Businesses[index].ImageUrl));
+        QNetworkReply* reply = networkManager.get(req);
+
+        TRACE_DEBUG("start waiting...");
+        eventLoop.exec(); // wait for answer
+
+        if (reply->error() == QNetworkReply::NoError)
+        {
+            TRACE_DEBUG("got an answer");
+            QByteArray jpegData = reply->readAll();
+            QPixmap pixmap;
+            pixmap.loadFromData(jpegData);
+            //pixmap.scaled(QSize(WIDGET_WIDTH / 2, WIDGET_WIDTH / 2), Qt::KeepAspectRatio);
+            //imageLabel->setPixmap(pixmap);
+            imageLabel->setPixmap(pixmap.scaled(QSize(WIDGET_WIDTH / 2, WIDGET_WIDTH / 2), Qt::KeepAspectRatio));
+
+            layout.addWidget(imageLabel);
+            layout.setAlignment(imageLabel, Qt::AlignTop | Qt::AlignHCenter);
+            //window.setGeometry(window.pos().x(), window.pos().y(), WIDGET_WIDTH, lineEdit.height() + WIDGET_WIDTH);
+            //imageLabel->show();
+            //imageLabel->move(QPoint(lineEdit.pos().x() + (WIDGET_WIDTH - imageLabel->width()) / 2, lineEdit.pos().y() + lineEdit.height()));
+        }
+        delete reply;
+
+        /* Display number of reviews: */
+        nbReviewsLabel = new QLabel(&window);
+        nbReviewsLabel->setText(QString("Number of reviews : %1").arg(Businesses[index].ReviewCount));
+        layout.addWidget(nbReviewsLabel);
+        layout.setAlignment(nbReviewsLabel, Qt::AlignTop | Qt::AlignHCenter);
+
+        /* Rating image */
+        imgRatingLabel = new QLabel(&window);
+        QImageReader reader(QString("/home/clement/Desktop/stars_map_www.png"));
+        reader.setClipRect(QRect(0, 1520+((int)((double)Businesses[index].Rating*2)-1)*69, 324, 69));
+        const QImage image = reader.read();
+        //imgRatingLabel->setPixmap(pixmap2.scaled(QSize(WIDGET_WIDTH / 2, WIDGET_WIDTH / 2), Qt::KeepAspectRatio));
+        //imgRatingLabel->setPixmap(QPixmap::fromImage(image));
+        imgRatingLabel->setPixmap(QPixmap::fromImage(image).scaled(QSize(WIDGET_WIDTH / 4, 69), Qt::KeepAspectRatio));
+
+        layout.addWidget(imgRatingLabel);
+        layout.setAlignment(imgRatingLabel, Qt::AlignTop | Qt::AlignHCenter);
+        //window.setGeometry(window.pos().x(), window.pos().y(), WIDGET_WIDTH, lineEdit.height() + WIDGET_WIDTH);
+        //imgRatingLabel->show();
+        //imageLabel->move(QPoint(lineEdit.pos().x() + (WIDGET_WIDTH - imageLabel->width()) / 2, lineEdit.pos().y() + lineEdit.height()));
+    }
+    else
+    {
+        layout.removeWidget(imageLabel);
+
+        delete nameLabel;
+        nameLabel = NULL;
+        delete imageLabel;
+        imageLabel = NULL;
+        delete addressLabel;
+        addressLabel = NULL;
+        delete nbReviewsLabel;
+        nbReviewsLabel = NULL;
+
+        Expand(false);
+    }
+}
+
 void MainApp::networkReplySearch(QNetworkReply* reply)
 {
     char buf[BIG_BUFFER_SIZE];
@@ -445,7 +557,7 @@ void MainApp::networkReplySearch(QNetworkReply* reply)
     // we only handle this callback if it matches the last search request:
     if (reply != pSearchReply)
     {
-        TRACE_WARN("this reply is already too late...");
+        TRACE_INFO("this reply is already too late (or about a different network request)");
         mutex.unlock();
         return;
     }

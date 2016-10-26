@@ -26,6 +26,7 @@ class MainApp: public QMainWindow
         void ParseJsonBusinessList(const char* buf, std::vector<Business> & Output);
         bool eventFilter(QObject *obj, QEvent *ev);
         void Expand(bool expand);
+        void DisplayInformation(bool display = true);
         void SetDestination();
 
         uint32_t navicoreSession;
@@ -38,6 +39,13 @@ class MainApp: public QMainWindow
         QNetworkAccessManager networkManager;
         QNetworkReply *pSearchReply;
         QTreeWidget *pResultList;
+
+        QLabel *nameLabel;
+        QLabel *imageLabel;
+        QLabel *addressLabel;
+        QLabel *imgRatingLabel;
+        QLabel *nbReviewsLabel;
+        
         std::vector<Business> Businesses;
 
     private slots:
