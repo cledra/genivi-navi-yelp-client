@@ -23,7 +23,8 @@ include_directories( ${DBUSCXX_INCLUDE_DIRS} ${QT5_CORE_INCLUDE_DIRS} ${QT5_WIDG
 
 qt5_wrap_cpp(yelp_client_SRC MainApp.h)
 
-add_executable( yelp-client main.cpp MainApp.cpp InfoPanel.cpp ${yelp_client_SRC} )
+QT5_ADD_RESOURCES(yelp_client_QRC yelp-client.qrc)
+add_executable( yelp-client main.cpp MainApp.cpp InfoPanel.cpp yelp-client.qrc ${yelp_client_SRC} ${yelp_client_QRC})
 target_link_libraries( yelp-client geniviwrapper )
 qt5_use_modules(yelp-client Core Widgets Network)
 
