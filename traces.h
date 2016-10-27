@@ -20,9 +20,8 @@
 #define TRACE_WARN(fmt, args...)  do { fprintf(stderr, "[%s:%d] " YELLOW "WARN"  NONE":  " fmt "\n", __func__, __LINE__, ##args); } while(0)
 #define TRACE_ERROR(fmt, args...) do { fprintf(stderr, "[%s:%d] " RED "ERROR" NONE ": " fmt "\n", __func__, __LINE__, ##args); } while(0)
 
-
-//#define TRACE_DEBUG(fmt, args...)
-/*
+#define TRACE_DEBUG_JSON(fmt, args...)
+/*#define TRACE_DEBUG(fmt, args...)
 #define TRACE_INFO(fmt, args...)
 #define TRACE_WARN(fmt, args...)
 #define TRACE_ERROR(fmt, args...)

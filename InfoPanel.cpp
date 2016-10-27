@@ -10,6 +10,7 @@
 #include <QImageReader>
 #include <QBoxLayout>
 #include <QPushButton>
+#include <QMessageBox>
 #include "InfoPanel.h"
 #include "traces.h"
 
@@ -18,21 +19,21 @@
 #define STARS_IMG_HEIGHT    69
 #define STARS_IMG_WIDTH     324
 
-InfoPanel::InfoPanel(QWidget *window, QBoxLayout *layout, Business & business):
-            QObject(),
+InfoPanel::InfoPanel(QWidget *parent, QBoxLayout *layout, Business & business):
+            QMessageBox(parent),
             pLayout(layout),
-            nameLabel(window),
-            imageLabel(window),
-            addressLabel(window),
-            zipCodeCityLabel(window),
-            phoneLabel(window),
-            imgRatingLabel(window),
-            nbReviewsLabel(window),
-            networkManager(window),
-            hLayout(window),
-            BackButton("Cancel", NULL),
-            GoButton("Go !", window)
-{
+            nameLabel(parent),
+            imageLabel(parent),
+            addressLabel(parent),
+            zipCodeCityLabel(parent),
+            phoneLabel(parent),
+            imgRatingLabel(parent),
+            nbReviewsLabel(parent),
+            networkManager(parent),
+
+            latitude(business.Latitude),
+            longitude(business.Longitude)
+{    
     QFont font = nameLabel.font();
     font.setPointSize(FONT_SIZE_INFO-4);
 
@@ -79,7 +80,7 @@ InfoPanel::InfoPanel(QWidget *window, QBoxLayout *layout, Business & business):
         QByteArray jpegData = reply->readAll();
         QPixmap pixmap;
         pixmap.loadFromData(jpegData);
-        imageLabel.setPixmap(pixmap.scaled(QSize(window->width() / 2, window->width() / 2), Qt::KeepAspectRatio));
+        imageLabel.setPixmap(pixmap.scaled(QSize(parent->width() / 2, parent->width() / 2), Qt::KeepAspectRatio));
         layout->addWidget(&imageLabel);
         layout->setAlignment(&imageLabel, Qt::AlignTop | Qt::AlignHCenter);
     }
@@ -96,23 +97,22 @@ InfoPanel::InfoPanel(QWidget *window, QBoxLayout *layout, Business & business):
     reader.setClipRect(QRect(0,
         STARS_IMG_OFFSET +((int)((double)business.Rating*2)-1)*STARS_IMG_HEIGHT, STARS_IMG_WIDTH, STARS_IMG_HEIGHT));
     const QImage image = reader.read();
-    imgRatingLabel.setPixmap(QPixmap::fromImage(image).scaled(QSize(window->width() / 4, 69), Qt::KeepAspectRatio));
+    imgRatingLabel.setPixmap(QPixmap::fromImage(image).scaled(QSize(parent->width() / 4, 69), Qt::KeepAspectRatio));
     layout->addWidget(&imgRatingLabel);
     layout->setAlignment(&imgRatingLabel, Qt::AlignTop | Qt::AlignHCenter);
 
     /* Buttons : */
-    hLayout.addWidget(&BackButton);
-    hLayout.addWidget(&GoButton);
-    layout->addLayout(&hLayout);
-    BackButton.setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
-    GoButton.setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
-    BackButton.setMinimumSize(QSize(window->width()/4, 75));
-    GoButton.setMinimumSize(QSize(window->width()/4, 75));
-    BackButton.setFont(font);
-    GoButton.setFont(font);
+    QPushButton *cancelButton = this->addButton(tr("Cancel"), QMessageBox::RejectRole);
+    QPushButton *goButton = this->addButton(tr("Go !"), QMessageBox::AcceptRole);
 
-    connect(&BackButton, SIGNAL(released()), window, SLOT(cancelClicked()));
-    connect(&GoButton,   SIGNAL(released()), window, SLOT(goClicked()));
+    cancelButton->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
+    goButton->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
+    cancelButton->setMinimumSize(QSize(parent->width()/4, 75));
+    goButton->setMinimumSize(QSize(parent->width()/4, 75));
+    cancelButton->setFont(font);
+    goButton->setFont(font);
+
+    connect(this, SIGNAL(accepted()), parent, SLOT(goClicked()));
 }
 
 InfoPanel::~InfoPanel()
@@ -122,6 +122,13 @@ InfoPanel::~InfoPanel()
     pLayout->removeWidget(&addressLabel);
     pLayout->removeWidget(&zipCodeCityLabel);
     pLayout->removeWidget(&phoneLabel);
-    pLayout->removeWidget(&imgRatingLabel);
     pLayout->removeWidget(&nbReviewsLabel);
+    pLayout->removeWidget(&imgRatingLabel);
+}
+
+bool InfoPanel::getCoords(double &lat, double &lon)
+{
+    lat = latitude;
+    lon = longitude;
+    return true;
 }

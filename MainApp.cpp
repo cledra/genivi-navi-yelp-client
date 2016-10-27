@@ -36,7 +36,7 @@ MainApp::MainApp(int argc, char* argv[]):
     navicoreSession(0),mutex(),wrapper(),
     window(Q_NULLPTR, Qt::FramelessWindowHint),layout(&window),
     lineEdit(&window),token(""),networkManager(this),pSearchReply(NULL),
-    pResultList(new QTreeWidget(&window)),infoPanel(NULL)
+    pResultList(new QTreeWidget(&window)),infoPanel(NULL),isInfoScreen(false)
 {
     window.setStyleSheet("background-color: rgba(235, 235, 235);");
     //window.setAttribute(Qt::WA_TranslucentBackground);
@@ -45,6 +45,8 @@ MainApp::MainApp(int argc, char* argv[]):
     QFont font = lineEdit.font();
     font.setPointSize(FONT_SIZE_LINEDIT);
     lineEdit.setFont(font);
+
+    window.setMinimumWidth(WIDGET_WIDTH);
 
     window.setLayout(&layout);
     layout.addWidget(&lineEdit, 0, Qt::AlignTop);
@@ -116,8 +118,9 @@ void MainApp::Expand(bool expand)
         pResultList->clear();
         pResultList->hide();
         layout.removeWidget(pResultList);
-        window.setGeometry(window.pos().x(), window.pos().y(), WIDGET_WIDTH, -1);
         lineEdit.setFocus();
+        lineEdit.deselect();
+        window.adjustSize();
     }
 
     if (getenv("AGL_NAVI"))
@@ -130,8 +133,6 @@ void MainApp::Expand(bool expand)
 void MainApp::textChanged(const QString & text)
 {
     double currentLatitude, currentLongitude;
-
-    DisplayInformation(false);
 
     TRACE_INFO("New text is: %s", qPrintable(text));
 
@@ -195,11 +196,11 @@ void MainApp::ParseJsonBusinessList(const char* buf, std::vector<Business> & Out
         
         if (json_object_get_type(val) == json_type_array)
         {
-            TRACE_DEBUG("an array was found");
+            TRACE_DEBUG_JSON("an array was found");
 
             if(json_object_object_get_ex(jobj, "businesses", &value))
             {
-                TRACE_DEBUG("an business was found");
+                TRACE_DEBUG_JSON("an business was found");
 
                 int arraylen = json_object_array_length(value);
 
@@ -215,55 +216,55 @@ void MainApp::ParseJsonBusinessList(const char* buf, std::vector<Business> & Out
                         {
                             NewBusiness.Rating = json_object_get_double(medi_array_obj_elem);
                             free(medi_array_obj_elem);
-                            TRACE_DEBUG("got Rating : %f", NewBusiness.Rating);
+                            TRACE_DEBUG_JSON("got Rating : %f", NewBusiness.Rating);
                         }
 
                         if (json_object_object_get_ex(medi_array_obj, "review_count", &medi_array_obj_elem))
                         {
                             NewBusiness.ReviewCount = json_object_get_int(medi_array_obj_elem);
                             free(medi_array_obj_elem);
-                            TRACE_DEBUG("got ReviewCount : %u", NewBusiness.ReviewCount);
+                            TRACE_DEBUG_JSON("got ReviewCount : %u", NewBusiness.ReviewCount);
                         }
 
                         if (json_object_object_get_ex(medi_array_obj, "name", &medi_array_obj_elem))
                         {
                             NewBusiness.Name = QString(json_object_get_string(medi_array_obj_elem));
                             free(medi_array_obj_elem);
-                            TRACE_DEBUG("got Name : %s", qPrintable(NewBusiness.Name));
+                            TRACE_DEBUG_JSON("got Name : %s", qPrintable(NewBusiness.Name));
                         }
 
                         if (json_object_object_get_ex(medi_array_obj, "image_url", &medi_array_obj_elem))
                         {
                             NewBusiness.ImageUrl = QString(json_object_get_string(medi_array_obj_elem));
                             free(medi_array_obj_elem);
-                            TRACE_DEBUG("got ImageUrl : %s", qPrintable(NewBusiness.ImageUrl));
+                            TRACE_DEBUG_JSON("got ImageUrl : %s", qPrintable(NewBusiness.ImageUrl));
                         }
 
                         if (json_object_object_get_ex(medi_array_obj, "phone", &medi_array_obj_elem))
                         {
                             NewBusiness.Phone = QString(json_object_get_string(medi_array_obj_elem));
                             free(medi_array_obj_elem);
-                            TRACE_DEBUG("got Phone : %s", qPrintable(NewBusiness.Phone));
+                            TRACE_DEBUG_JSON("got Phone : %s", qPrintable(NewBusiness.Phone));
                         }
 
                         if (json_object_object_get_ex(medi_array_obj, "coordinates", &medi_array_obj_elem))
                         {
                             json_object *value2;
                             
-                            TRACE_DEBUG("coordinates were found");
+                            TRACE_DEBUG_JSON("coordinates were found");
 
                             if(json_object_object_get_ex(medi_array_obj_elem, "latitude", &value2))
                             {
                                 NewBusiness.Latitude = json_object_get_double(value2);
                                 free(value2);
-                                TRACE_DEBUG("got Latitude : %f", NewBusiness.Latitude);
+                                TRACE_DEBUG_JSON("got Latitude : %f", NewBusiness.Latitude);
                             }
 
                             if(json_object_object_get_ex(medi_array_obj_elem, "longitude", &value2))
                             {
                                 NewBusiness.Longitude = json_object_get_double(value2);
                                 free(value2);
-                                TRACE_DEBUG("got Longitude : %f", NewBusiness.Longitude);
+                                TRACE_DEBUG_JSON("got Longitude : %f", NewBusiness.Longitude);
                             }
                                     
                             free(medi_array_obj_elem);
@@ -273,42 +274,42 @@ void MainApp::ParseJsonBusinessList(const char* buf, std::vector<Business> & Out
                         {
                             json_object *value2;
                             
-                            TRACE_DEBUG("a location was found");
+                            TRACE_DEBUG_JSON("a location was found");
 
                             /* TODO: how do we deal with address2 and address3 ? */
                             if(json_object_object_get_ex(medi_array_obj_elem, "address1", &value2))
                             {
                                 NewBusiness.Address = QString(json_object_get_string(value2));
                                 free(value2);
-                                TRACE_DEBUG("got Address : %s", qPrintable(NewBusiness.Address));
+                                TRACE_DEBUG_JSON("got Address : %s", qPrintable(NewBusiness.Address));
                             }
 
                             if(json_object_object_get_ex(medi_array_obj_elem, "city", &value2))
                             {
                                 NewBusiness.City = QString(json_object_get_string(value2));
                                 free(value2);
-                                TRACE_DEBUG("got City : %s", qPrintable(NewBusiness.City));
+                                TRACE_DEBUG_JSON("got City : %s", qPrintable(NewBusiness.City));
                             }
 
                             if(json_object_object_get_ex(medi_array_obj_elem, "state", &value2))
                             {
                                 NewBusiness.State = QString(json_object_get_string(value2));
                                 free(value2);
-                                TRACE_DEBUG("got State : %s", qPrintable(NewBusiness.State));
+                                TRACE_DEBUG_JSON("got State : %s", qPrintable(NewBusiness.State));
                             }
 
                             if(json_object_object_get_ex(medi_array_obj_elem, "zip_code", &value2))
                             {
                                 NewBusiness.ZipCode = QString(json_object_get_string(value2));
                                 free(value2);
-                                TRACE_DEBUG("got ZipCode : %s", qPrintable(NewBusiness.ZipCode));
+                                TRACE_DEBUG_JSON("got ZipCode : %s", qPrintable(NewBusiness.ZipCode));
                             }
 
                             if(json_object_object_get_ex(medi_array_obj_elem, "country", &value2))
                             {
                                 NewBusiness.Country = QString(json_object_get_string(value2));
                                 free(value2);
-                                TRACE_DEBUG("got Country : %s", qPrintable(NewBusiness.Country));
+                                TRACE_DEBUG_JSON("got Country : %s", qPrintable(NewBusiness.Country));
                             }
 
                             free(medi_array_obj_elem);
@@ -335,7 +336,6 @@ bool MainApp::eventFilter(QObject *obj, QEvent *ev)
 {
     if (obj != pResultList)
     {
-        TRACE_WARN("return false");
         return false;
     }
 
@@ -362,13 +362,16 @@ bool MainApp::eventFilter(QObject *obj, QEvent *ev)
             case Qt::Key_Enter:
             case Qt::Key_Return:
                 TRACE_DEBUG("enter or return");
-                //SetDestination();
+                if (isInfoScreen)
+                {
+                    DisplayInformation();
+                    break;
+                }
+                else
+                {
+                    SetDestination();
+                }
                 consumed = true;
-
-                /**/
-                DisplayInformation();
-                break;
-                /**/
 
             case Qt::Key_Escape:
                 TRACE_DEBUG("escape");
@@ -397,22 +400,23 @@ bool MainApp::eventFilter(QObject *obj, QEvent *ev)
     return false;
 }
 
-void MainApp::SetDestination()
+void MainApp::SetDestination(double latitude, double longitude)
 {
     QList<QTreeWidgetItem *> SelectedItems = pResultList->selectedItems();
     if (SelectedItems.size() <= 0)
     {
-        TRACE_ERROR("no item is selected");
-        return;
+        TRACE_INFO("no item is selected");
     }
+    else
+    {
+        /* select the first selected item : */
+        int index = pResultList->indexOfTopLevelItem(*SelectedItems.begin());
+        TRACE_DEBUG("index is: %d", index);
 
-    /* select the first selected item : */
-    int index = pResultList->indexOfTopLevelItem(*SelectedItems.begin());
-    TRACE_DEBUG("index is: %d", index);
-
-    /* retrieve the coordinates of this item : */
-    double targetLatitude  = Businesses[index].Latitude;
-    double targetLongitude = Businesses[index].Longitude;
+        /* retrieve the coordinates of this item : */
+        latitude = Businesses[index].Latitude;
+        longitude = Businesses[index].Longitude;
+    }
 
     /* check if a route already exists, if not create it : */
     uint32_t myRoute;
@@ -432,7 +436,7 @@ void MainApp::SetDestination()
     }
 
     /* set the destination : */
-    Waypoint destWp(targetLatitude, targetLongitude);
+    Waypoint destWp(latitude, longitude);
     std::vector<Waypoint> myWayPoints;
     myWayPoints.push_back(destWp);
     wrapper.NavicoreSetWaypoints(navicoreSession, myRoute, true, myWayPoints);
@@ -440,39 +444,51 @@ void MainApp::SetDestination()
     wrapper.NavicoreCalculateRoute(navicoreSession, myRoute);
 }
 
-void MainApp::DisplayInformation(bool display)
+void MainApp::DisplayInformation()
 {
-    if (display)
+    QList<QTreeWidgetItem *> SelectedItems = pResultList->selectedItems();
+    if (SelectedItems.size() <= 0)
     {
-        QList<QTreeWidgetItem *> SelectedItems = pResultList->selectedItems();
-        if (SelectedItems.size() <= 0)
-        {
-            TRACE_ERROR("no item is selected");
-            return;
-        }
-
-        /* select the first selected item : */
-        int index = pResultList->indexOfTopLevelItem(*SelectedItems.begin());
-        TRACE_DEBUG("index is: %d", index);
-
-        /* Resize window: */
-        Expand(false);
-        window.setGeometry(window.pos().x(), window.pos().y(), WIDGET_WIDTH, WIDGET_WIDTH);
-
-        /* Display info for the selected item: */
-        infoPanel = new InfoPanel(this, &layout, Businesses[index]);
+        TRACE_ERROR("no item is selected");
+        return;
     }
-    else
-    {
-        delete infoPanel;
-        infoPanel = NULL;
-    }
+
+    /* select the first selected item : */
+    int index = pResultList->indexOfTopLevelItem(*SelectedItems.begin());
+    TRACE_DEBUG("index is: %d", index);
+
+    /* Resize window: */
+    Expand(false);
+    window.setGeometry(window.pos().x(), window.pos().y(), WIDGET_WIDTH, WIDGET_WIDTH);
+
+    /* Display info for the selected item: */
+    infoPanel = new InfoPanel(this, &layout, Businesses[index]);
+    TRACE_INFO("infoPanel = %p", infoPanel);
+
+    layout.addWidget(infoPanel);
+    layout.setAlignment(infoPanel, Qt::AlignTop | Qt::AlignHCenter);
+    infoPanel->setFocus();
 
     if (getenv("AGL_NAVI"))
     {
         QTimer timer(this);
         timer.singleShot(0, this, SLOT(UpdateAglSurfaces()));
     }
+    
+    infoPanel->exec(); // wait for user to click
+
+    layout.removeWidget(infoPanel);
+    delete infoPanel;
+    infoPanel = NULL;
+    Expand(false);
+
+    if (getenv("AGL_NAVI"))
+    {
+        QTimer timer(this);
+        timer.singleShot(0, this, SLOT(UpdateAglSurfaces()));
+    }
+
+    TRACE_INFO(" ");
 }
 
 void MainApp::networkReplySearch(QNetworkReply* reply)
@@ -645,17 +661,16 @@ int MainApp::StartMonitoringUserInput()
     return 1;
 }
 
-void MainApp::cancelClicked()
-{
-    TRACE_WARN("cancel clicked !");
-    DisplayInformation(false);
-    Expand(false);
-    TRACE_WARN("done");
-}
-
 void MainApp::goClicked()
 {
-    TRACE_WARN("go clicked !");
-
-    TRACE_WARN("done");
+    TRACE_INFO("go clicked !");
+    lineEdit.setText(tr(""));
+    if (infoPanel)
+    {
+        double latitude, longitude;
+        if (infoPanel->getCoords(latitude, longitude))
+        {
+            SetDestination(latitude, longitude);
+        }
+    }
 }

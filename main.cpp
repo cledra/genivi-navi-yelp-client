@@ -14,11 +14,13 @@ static void usage(void)
     cout << "                     Credentials file must be formated this way:" << endl;
     cout << "                        AppId=dummy" << endl;
     cout << "                        AppSecret=dummy-secret" << endl;
+    cout << "  -i, --information-screen                        display info screen about selection" << endl;
     cout << "  -h, --help                                      this help message" << endl;
 }
 
 static struct option long_options[] = {
     {"credentials",             required_argument,  0,  'c' },
+    {"information-screen",      no_argument,        0,  'i' },
     {"help",                    no_argument,        0,  'h' },
     {0,                         0,                  0,  '\0'}
 };
@@ -31,12 +33,15 @@ int main(int argc, char *argv[])
     QString credentialsFile(DEFAULT_CREDENTIALS_FILE);
 
     /* first, parse options : */
-    while ((opt = getopt_long(argc, argv, "c:h", long_options, NULL)) != -1)
+    while ((opt = getopt_long(argc, argv, "c:ih", long_options, NULL)) != -1)
     {
         switch (opt)
         {
             case 'c':
                 credentialsFile = QString(optarg);
+                break;
+            case 'i':
+                mainapp.setInfoScreen(true);
                 break;
             case 'h':
                 usage();
