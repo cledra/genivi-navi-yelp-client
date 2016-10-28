@@ -459,7 +459,6 @@ void MainApp::DisplayInformation()
 
     /* Resize window: */
     Expand(false);
-    window.setGeometry(window.pos().x(), window.pos().y(), WIDGET_WIDTH, WIDGET_WIDTH);
 
     /* Display info for the selected item: */
     infoPanel = new InfoPanel(this, &layout, Businesses[index]);
@@ -469,12 +468,14 @@ void MainApp::DisplayInformation()
     layout.setAlignment(infoPanel, Qt::AlignTop | Qt::AlignHCenter);
     infoPanel->setFocus();
 
+    window.adjustSize();
+
     if (getenv("AGL_NAVI"))
     {
         QTimer timer(this);
-        timer.singleShot(0, this, SLOT(UpdateAglSurfaces()));
+        timer.singleShot(100, this, SLOT(UpdateAglSurfaces()));
     }
-    
+
     infoPanel->exec(); // wait for user to click
 
     layout.removeWidget(infoPanel);
