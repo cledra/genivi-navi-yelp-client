@@ -65,6 +65,21 @@ MainApp::MainApp(int argc, char* argv[]):
     
     Expand(false);
 
+    /* We might need a Japanese font: */
+    QFile fontFile(":/fonts/DroidSansJapanese.ttf");
+    if (!fontFile.open(QIODevice::ReadOnly))
+    {
+        TRACE_ERROR("failed to open font file");
+    }
+    else
+    {
+        QByteArray fontData = fontFile.readAll();
+        if (QFontDatabase::addApplicationFontFromData(fontData) == -1)
+        {
+            TRACE_ERROR("QFontDatabase::addApplicationFontFromData failed");
+        }
+    }
+
     window.show();
 }
 
