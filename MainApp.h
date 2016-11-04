@@ -24,6 +24,7 @@ class MainApp: public QMainWindow
         int AuthenticatePOI(const QString & CredentialsFile);
         int StartMonitoringUserInput();
         void setInfoScreen(bool val) { isInfoScreen = val; }
+        void setKeyboard(bool val)   { isKeyboard = val; }
 
     private:
         void ParseJsonBusinessList(const char* buf, std::vector<Business> & Output);
@@ -47,11 +48,13 @@ class MainApp: public QMainWindow
         Keyboard keyboard;
         InfoPanel *infoPanel;
         bool isInfoScreen;
+        bool isKeyboard;
 
     private slots:
         void textChanged(const QString & text);
         void textAdded(const QString & text);
         void keyPressed(int key);
+        void itemClicked(QTreeWidgetItem *item, int column);
         void networkReplySearch(QNetworkReply* reply);
         void UpdateAglSurfaces();
         void goClicked();

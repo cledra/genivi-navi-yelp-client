@@ -37,10 +37,13 @@ MainApp::MainApp(int argc, char* argv[]):
     navicoreSession(0),mutex(),wrapper(),
     window(Q_NULLPTR, Qt::FramelessWindowHint),layout(&window),
     lineEdit(&window),token(""),networkManager(this),pSearchReply(NULL),
-    pResultList(new QTreeWidget(&window)),keyboard(&window),infoPanel(NULL),isInfoScreen(false)
+    pResultList(new QTreeWidget(&window)),keyboard(&window),infoPanel(NULL),
+    isInfoScreen(false),isKeyboard(false)
 {
     window.setStyleSheet("background-color: rgba(235, 235, 235);");
     //window.setAttribute(Qt::WA_TranslucentBackground);
+
+    keyboard.hide();
 
     lineEdit.setPlaceholderText(QString(DEFAULT_TEXT));
     QFont font = lineEdit.font();
@@ -116,7 +119,7 @@ void MainApp::Expand(bool expand)
 
         int h = pResultList->sizeHintForRow(0) * (Businesses.size() + 1);
 
-        if (!keyboard.isVisible())
+        if (isKeyboard && !keyboard.isVisible())
         {
             layout.addWidget(&keyboard);
             keyboard.show();
@@ -127,10 +130,10 @@ void MainApp::Expand(bool expand)
         {
             layout.addWidget(pResultList);
             pResultList->show();
-            pResultList->move(QPoint(lineEdit.pos().x(), lineEdit.pos().y() + lineEdit.height() + keyboard.height()));
+            pResultList->move(QPoint(lineEdit.pos().x(), lineEdit.pos().y() + lineEdit.height() + (isKeyboard ? keyboard.height() : 0)));
         }
 
-        window.setGeometry(window.pos().x(), window.pos().y(), WIDGET_WIDTH, lineEdit.height() + keyboard.height() + h + 50);
+        window.setGeometry(window.pos().x(), window.pos().y(), WIDGET_WIDTH, lineEdit.height() + (isKeyboard ? keyboard.height() : 0) + h + 50);
 
         pResultList->setCurrentItem(pResultList->topLevelItem(0));
         pResultList->resize(lineEdit.width(), h);
@@ -146,8 +149,11 @@ void MainApp::Expand(bool expand)
         pResultList->clear();
         pResultList->hide();
         layout.removeWidget(pResultList);
-        keyboard.hide();
-        layout.removeWidget(&keyboard);
+        if (isKeyboard)
+        {
+            keyboard.hide();
+            layout.removeWidget(&keyboard);
+        }
         lineEdit.setFocus();
         lineEdit.deselect();
         window.adjustSize();
@@ -250,7 +256,27 @@ void MainApp::keyPressed(int key)
     if (key == Qt::Key_Backspace)
     {
         int len = lineEdit.text().length();
-        lineEdit.setText(lineEdit.text().remove(len-1, 1));
+        if (len > 0)
+            lineEdit.setText(lineEdit.text().remove(len-1, 1));
+        else if (isKeyboard)
+            ShowKeyboard(false);
+    }
+}
+
+void MainApp::itemClicked(QTreeWidgetItem *item, int column)
+{
+    (void)item;
+    (void)column;
+
+    if (isInfoScreen)
+    {
+        DisplayInformation();
+    }
+    else
+    {
+        SetDestination();
+        lineEdit.setText(tr(""));
+        Expand(false);
     }
 }
 
@@ -410,7 +436,7 @@ bool MainApp::eventFilter(QObject *obj, QEvent *ev)
 {
     if (obj == pResultList)
     {
-        TRACE_DEBUG("ev->type() = %d", (int)ev->type());
+        //TRACE_DEBUG("ev->type() = %d", (int)ev->type());
 
         if (ev->type() == QEvent::HideToParent)
         {
@@ -442,6 +468,7 @@ bool MainApp::eventFilter(QObject *obj, QEvent *ev)
                     else
                     {
                         SetDestination();
+                        lineEdit.setText(tr(""));
                     }
                     consumed = true;
 
@@ -462,7 +489,6 @@ bool MainApp::eventFilter(QObject *obj, QEvent *ev)
                 default:
                     TRACE_DEBUG("default");
                     lineEdit.event(ev);
-                    //Expand(false);
                     break;
             }
 
@@ -474,7 +500,7 @@ bool MainApp::eventFilter(QObject *obj, QEvent *ev)
         if (ev->type() == QEvent::MouseButtonRelease)
         {
             TRACE_DEBUG("lineEdit widget clicked !");
-            if (!keyboard.isVisible())
+            if (isKeyboard && !keyboard.isVisible())
                 ShowKeyboard();
         }
     }
@@ -563,13 +589,13 @@ void MainApp::DisplayInformation()
     layout.removeWidget(infoPanel);
     delete infoPanel;
     infoPanel = NULL;
-    Expand(false);
+    lineEdit.setText(tr(""));
 
-    if (getenv("AGL_NAVI"))
+    /*if (getenv("AGL_NAVI")) // TODO: check
     {
         QTimer timer(this);
         timer.singleShot(0, this, SLOT(UpdateAglSurfaces()));
-    }
+    }*/
 
     TRACE_INFO(" ");
 }
@@ -740,16 +766,20 @@ int MainApp::AuthenticatePOI(const QString & CredentialsFile)
 int MainApp::StartMonitoringUserInput()
 {
     connect(&lineEdit, SIGNAL(textChanged(const QString &)), this, SLOT(textChanged(const QString &)));
-    connect(&keyboard, SIGNAL(keyClicked(const QString &)), this, SLOT(textAdded(const QString &)));
-    connect(&keyboard, SIGNAL(specialKeyClicked(int)), this, SLOT(keyPressed(int)));
+    if (isKeyboard)
+    {
+        connect(&keyboard, SIGNAL(keyClicked(const QString &)), this, SLOT(textAdded(const QString &)));
+        connect(&keyboard, SIGNAL(specialKeyClicked(int)), this, SLOT(keyPressed(int)));
+    }
     connect(&networkManager, SIGNAL(finished(QNetworkReply*)), this, SLOT(networkReplySearch(QNetworkReply*)));
+    connect(pResultList, SIGNAL(itemClicked(QTreeWidgetItem *, int)), this, SLOT(itemClicked(QTreeWidgetItem *, int)));
     return 1;
 }
 
 void MainApp::goClicked()
 {
     TRACE_INFO("go clicked !");
-    lineEdit.setText(tr(""));
+
     if (infoPanel)
     {
         double latitude, longitude;
