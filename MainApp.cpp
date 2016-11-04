@@ -16,6 +16,7 @@
 #include "MainApp.h"
 #include "Business.h"
 #include "InfoPanel.h"
+#include "Keyboard.h"
 #include "libgeniviwrapper/GeniviWrapper.h"
 #include "libgeniviwrapper/include/genivi-navicore-constants.h"
 #include "traces.h"
@@ -36,7 +37,7 @@ MainApp::MainApp(int argc, char* argv[]):
     navicoreSession(0),mutex(),wrapper(),
     window(Q_NULLPTR, Qt::FramelessWindowHint),layout(&window),
     lineEdit(&window),token(""),networkManager(this),pSearchReply(NULL),
-    pResultList(new QTreeWidget(&window)),infoPanel(NULL),isInfoScreen(false)
+    pResultList(new QTreeWidget(&window)),keyboard(&window),infoPanel(NULL),isInfoScreen(false)
 {
     window.setStyleSheet("background-color: rgba(235, 235, 235);");
     //window.setAttribute(Qt::WA_TranslucentBackground);
@@ -45,11 +46,12 @@ MainApp::MainApp(int argc, char* argv[]):
     QFont font = lineEdit.font();
     font.setPointSize(FONT_SIZE_LINEDIT);
     lineEdit.setFont(font);
+    lineEdit.installEventFilter(this);
 
     window.setMinimumWidth(WIDGET_WIDTH);
 
     window.setLayout(&layout);
-    layout.addWidget(&lineEdit, 0, Qt::AlignTop);
+    layout.addWidget(&lineEdit);
 
     pResultList->setColumnCount(2);
     pResultList->setUniformRowHeights(true);
@@ -62,7 +64,7 @@ MainApp::MainApp(int argc, char* argv[]):
     pResultList->header()->hide();
     pResultList->setFont(font);
     pResultList->installEventFilter(this);
-    
+
     Expand(false);
 
     /* We might need a Japanese font: */
@@ -110,18 +112,29 @@ void MainApp::Expand(bool expand)
 {
     if (expand)
     {
-        /* Make space to display the QLineEdit + the result list : */
+        /* Make space to display the QLineEdit + keyboard + result list : */
 
         int h = pResultList->sizeHintForRow(0) * (Businesses.size() + 1);
-        window.setGeometry(window.pos().x(), window.pos().y(), WIDGET_WIDTH, lineEdit.height() + h + 10);
 
-        layout.addWidget(pResultList, 0, Qt::AlignTop);
-        pResultList->show();
+        if (!keyboard.isVisible())
+        {
+            layout.addWidget(&keyboard);
+            keyboard.show();
+            keyboard.move(QPoint(lineEdit.pos().x(), lineEdit.pos().y() + lineEdit.height()));
+        }
+
+        if (!pResultList->isVisible())
+        {
+            layout.addWidget(pResultList);
+            pResultList->show();
+            pResultList->move(QPoint(lineEdit.pos().x(), lineEdit.pos().y() + lineEdit.height() + keyboard.height()));
+        }
+
+        window.setGeometry(window.pos().x(), window.pos().y(), WIDGET_WIDTH, lineEdit.height() + keyboard.height() + h + 50);
 
         pResultList->setCurrentItem(pResultList->topLevelItem(0));
         pResultList->resize(lineEdit.width(), h);
-        
-        pResultList->move(QPoint(lineEdit.pos().x(), lineEdit.pos().y() + lineEdit.height()));
+
         pResultList->setColumnWidth(0, pResultList->width() / 2);
         pResultList->setColumnWidth(1, pResultList->width() / 2);
         pResultList->setFocus();
@@ -133,6 +146,38 @@ void MainApp::Expand(bool expand)
         pResultList->clear();
         pResultList->hide();
         layout.removeWidget(pResultList);
+        keyboard.hide();
+        layout.removeWidget(&keyboard);
+        lineEdit.setFocus();
+        lineEdit.deselect();
+        window.adjustSize();
+    }
+
+    if (getenv("AGL_NAVI"))
+    {
+        QTimer timer(this);
+        timer.singleShot(0, this, SLOT(UpdateAglSurfaces()));
+    }
+}
+
+void MainApp::ShowKeyboard(bool show)
+{
+    if (show)
+    {
+        TRACE_INFO("showing keyboard");
+        /* Make space to display the QLineEdit + the keyboard : */
+
+        window.setGeometry(window.pos().x(), window.pos().y(), WIDGET_WIDTH, lineEdit.height() + keyboard.height());
+
+        layout.addWidget(&keyboard);
+        keyboard.show();
+        keyboard.setFocus();
+    }
+    else
+    {
+        TRACE_INFO("hiding keyboard");
+        keyboard.hide();
+        layout.removeWidget(&keyboard);
         lineEdit.setFocus();
         lineEdit.deselect();
         window.adjustSize();
@@ -193,6 +238,20 @@ void MainApp::textChanged(const QString & text)
     TRACE_DEBUG("after post, reply is %p", pSearchReply);
     
     mutex.unlock();
+}
+
+void MainApp::textAdded(const QString & text)
+{
+    lineEdit.setText(lineEdit.text() + text);
+}
+
+void MainApp::keyPressed(int key)
+{
+    if (key == Qt::Key_Backspace)
+    {
+        int len = lineEdit.text().length();
+        lineEdit.setText(lineEdit.text().remove(len-1, 1));
+    }
 }
 
 void MainApp::ParseJsonBusinessList(const char* buf, std::vector<Business> & Output)
@@ -349,67 +408,75 @@ void MainApp::ParseJsonBusinessList(const char* buf, std::vector<Business> & Out
 
 bool MainApp::eventFilter(QObject *obj, QEvent *ev)
 {
-    if (obj != pResultList)
+    if (obj == pResultList)
     {
-        return false;
-    }
+        TRACE_DEBUG("ev->type() = %d", (int)ev->type());
 
-    TRACE_DEBUG("ev->type() = %d", (int)ev->type());
-
-    if (ev->type() == QEvent::HideToParent)
-    {
-        /* that's no reason to select the text, is it ? */
-        lineEdit.deselect();
-    }
-
-    if (ev->type() == QEvent::MouseButtonPress) {
-        Expand(false);
-        TRACE_DEBUG("mouse button");
-        return true;
-    }
-
-    if (ev->type() == QEvent::KeyPress) {
-
-        bool consumed = false;
-        int key = static_cast<QKeyEvent*>(ev)->key();
-        TRACE_DEBUG("key pressed (%d)", key);
-        switch (key) {
-            case Qt::Key_Enter:
-            case Qt::Key_Return:
-                TRACE_DEBUG("enter or return");
-                if (isInfoScreen)
-                {
-                    DisplayInformation();
-                    break;
-                }
-                else
-                {
-                    SetDestination();
-                }
-                consumed = true;
-
-            case Qt::Key_Escape:
-                TRACE_DEBUG("escape");
-                Expand(false);
-                consumed = true;
-
-            case Qt::Key_Up:
-            case Qt::Key_Down:
-            case Qt::Key_Home:
-            case Qt::Key_End:
-            case Qt::Key_PageUp:
-            case Qt::Key_PageDown:
-                TRACE_DEBUG("arrows");
-                break;
-
-            default:
-                TRACE_DEBUG("default");
-                lineEdit.event(ev);
-                Expand(false);
-                break;
+        if (ev->type() == QEvent::HideToParent)
+        {
+            /* that's no reason to select the text, is it ? */
+            lineEdit.deselect();
         }
 
-        return consumed;
+        if (ev->type() == QEvent::MouseButtonPress)
+        {
+            Expand(false);
+            TRACE_DEBUG("mouse button");
+            return true;
+        }
+
+        if (ev->type() == QEvent::KeyPress) {
+
+            bool consumed = false;
+            int key = static_cast<QKeyEvent*>(ev)->key();
+            TRACE_DEBUG("key pressed (%d)", key);
+            switch (key) {
+                case Qt::Key_Enter:
+                case Qt::Key_Return:
+                    TRACE_DEBUG("enter or return");
+                    if (isInfoScreen)
+                    {
+                        DisplayInformation();
+                        break;
+                    }
+                    else
+                    {
+                        SetDestination();
+                    }
+                    consumed = true;
+
+                case Qt::Key_Escape:
+                    TRACE_DEBUG("escape");
+                    Expand(false);
+                    consumed = true;
+
+                case Qt::Key_Up:
+                case Qt::Key_Down:
+                case Qt::Key_Home:
+                case Qt::Key_End:
+                case Qt::Key_PageUp:
+                case Qt::Key_PageDown:
+                    TRACE_DEBUG("arrows");
+                    break;
+
+                default:
+                    TRACE_DEBUG("default");
+                    lineEdit.event(ev);
+                    //Expand(false);
+                    break;
+            }
+
+            return consumed;
+        }
+    }
+    else if (obj == &lineEdit)
+    {
+        if (ev->type() == QEvent::MouseButtonRelease)
+        {
+            TRACE_DEBUG("lineEdit widget clicked !");
+            if (!keyboard.isVisible())
+                ShowKeyboard();
+        }
     }
 
     return false;
@@ -673,6 +740,8 @@ int MainApp::AuthenticatePOI(const QString & CredentialsFile)
 int MainApp::StartMonitoringUserInput()
 {
     connect(&lineEdit, SIGNAL(textChanged(const QString &)), this, SLOT(textChanged(const QString &)));
+    connect(&keyboard, SIGNAL(keyClicked(const QString &)), this, SLOT(textAdded(const QString &)));
+    connect(&keyboard, SIGNAL(specialKeyClicked(int)), this, SLOT(keyPressed(int)));
     connect(&networkManager, SIGNAL(finished(QNetworkReply*)), this, SLOT(networkReplySearch(QNetworkReply*)));
     return 1;
 }

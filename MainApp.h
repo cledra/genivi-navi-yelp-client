@@ -11,6 +11,7 @@
 #include "libgeniviwrapper/GeniviWrapper.h"
 #include "Business.h"
 #include "InfoPanel.h"
+#include "Keyboard.h"
 
 class MainApp: public QMainWindow
 {
@@ -27,6 +28,7 @@ class MainApp: public QMainWindow
     private:
         void ParseJsonBusinessList(const char* buf, std::vector<Business> & Output);
         bool eventFilter(QObject *obj, QEvent *ev);
+        void ShowKeyboard(bool show = true);
         void Expand(bool expand);
         void DisplayInformation();
         void SetDestination(double latitude = 0.0, double longitude = 0.0);
@@ -42,11 +44,14 @@ class MainApp: public QMainWindow
         QNetworkReply *pSearchReply;
         QTreeWidget *pResultList;
         std::vector<Business> Businesses;
+        Keyboard keyboard;
         InfoPanel *infoPanel;
         bool isInfoScreen;
 
     private slots:
         void textChanged(const QString & text);
+        void textAdded(const QString & text);
+        void keyPressed(int key);
         void networkReplySearch(QNetworkReply* reply);
         void UpdateAglSurfaces();
         void goClicked();
