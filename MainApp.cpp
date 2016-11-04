@@ -202,6 +202,9 @@ void MainApp::textChanged(const QString & text)
 
     TRACE_INFO("New text is: %s", qPrintable(text));
 
+    /* do not handle text input if info panel is displayed: */
+    if (infoPanel) return;
+
     mutex.lock();
 
     delete pSearchReply;    /* cancel current search */
@@ -500,7 +503,7 @@ bool MainApp::eventFilter(QObject *obj, QEvent *ev)
         if (ev->type() == QEvent::MouseButtonRelease)
         {
             TRACE_DEBUG("lineEdit widget clicked !");
-            if (isKeyboard && !keyboard.isVisible())
+            if (isKeyboard && !infoPanel && !keyboard.isVisible())
                 ShowKeyboard();
         }
     }
