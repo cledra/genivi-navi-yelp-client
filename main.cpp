@@ -31,7 +31,7 @@ int main(int argc, char *argv[])
 {
     int opt;
     QApplication a(argc, argv);
-    MainApp mainapp(argc, argv);
+    MainApp mainapp;
     QString credentialsFile(DEFAULT_CREDENTIALS_FILE);
 
     /* first, parse options : */

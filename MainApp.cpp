@@ -28,12 +28,11 @@
 
 #define BIG_BUFFER_SIZE     (1024*1024)
 #define FONT_SIZE_LINEDIT   20
-#define FONT_SIZE_LIST      16
 #define WIDGET_WIDTH        800
 
 using namespace std;
 
-MainApp::MainApp(int argc, char* argv[]):
+MainApp::MainApp():
     navicoreSession(0),mutex(),wrapper(),
     window(Q_NULLPTR, Qt::FramelessWindowHint),layout(&window),
     lineEdit(&window),token(""),networkManager(this),pSearchReply(NULL),
@@ -513,6 +512,8 @@ bool MainApp::eventFilter(QObject *obj, QEvent *ev)
 
 void MainApp::SetDestination(double latitude, double longitude)
 {
+    /* params are only used if no item is selected in pResultList. */
+    
     QList<QTreeWidgetItem *> SelectedItems = pResultList->selectedItems();
     if (SelectedItems.size() <= 0)
     {
@@ -587,20 +588,34 @@ void MainApp::DisplayInformation()
         timer.singleShot(100, this, SLOT(UpdateAglSurfaces()));
     }
 
-    infoPanel->exec(); // wait for user to click
+    int res = infoPanel->exec(); // wait for user to click
+
+    if (res == QDialog::Accepted)
+    {
+        double latitude, longitude;
+        if (infoPanel->getCoords(latitude, longitude))
+        {
+            SetDestination(latitude, longitude);
+        }
+    }
 
     layout.removeWidget(infoPanel);
     delete infoPanel;
     infoPanel = NULL;
+
+    QString oldText = lineEdit.text();
     lineEdit.setText(tr(""));
+
+    if (res == QDialog::Rejected)
+    {
+        lineEdit.setText(oldText);
+    }
 
     /*if (getenv("AGL_NAVI")) // TODO: check
     {
         QTimer timer(this);
         timer.singleShot(0, this, SLOT(UpdateAglSurfaces()));
     }*/
-
-    TRACE_INFO(" ");
 }
 
 void MainApp::networkReplySearch(QNetworkReply* reply)
@@ -678,7 +693,7 @@ int MainApp::AuthenticatePOI(const QString & CredentialsFile)
         return -1;
     }
 
-    if (!fgets(buf, 5125, filep))
+    if (!fgets(buf, 512, filep))
     {
         TRACE_ERROR("Failed to read AppId from credentials file \"%s\"", qPrintable(CredentialsFile));
         fclose(filep);
@@ -689,7 +704,7 @@ int MainApp::AuthenticatePOI(const QString & CredentialsFile)
     AppId = QString(buf);
     AppId.replace(0, 6, QString(""));
     
-    if (!fgets(buf, 5125, filep))
+    if (!fgets(buf, 512, filep))
     {
         TRACE_ERROR("Failed to read AppSecret from credentials file \"%s\"", qPrintable(CredentialsFile));
         fclose(filep);
@@ -779,16 +794,7 @@ int MainApp::StartMonitoringUserInput()
     return 1;
 }
 
-void MainApp::goClicked()
+/*void MainApp::goClicked()
 {
     TRACE_INFO("go clicked !");
-
-    if (infoPanel)
-    {
-        double latitude, longitude;
-        if (infoPanel->getCoords(latitude, longitude))
-        {
-            SetDestination(latitude, longitude);
-        }
-    }
-}
+}*/

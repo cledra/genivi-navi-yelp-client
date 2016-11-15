@@ -18,7 +18,7 @@ class MainApp: public QMainWindow
     Q_OBJECT
 
     public:
-        explicit MainApp(int argc, char* argv[]);
+        explicit MainApp();
         ~MainApp();
         int CheckGeniviApi();
         int AuthenticatePOI(const QString & CredentialsFile);
@@ -35,7 +35,7 @@ class MainApp: public QMainWindow
         void SetDestination(double latitude = 0.0, double longitude = 0.0);
 
         uint32_t navicoreSession;
-        QMutex mutex;
+        QMutex mutex; // to protect 'pSearchReply' from concurrent access
         GeniviWrapper wrapper;
         QWidget window;
         QVBoxLayout layout;
@@ -57,7 +57,7 @@ class MainApp: public QMainWindow
         void itemClicked(QTreeWidgetItem *item, int column);
         void networkReplySearch(QNetworkReply* reply);
         void UpdateAglSurfaces();
-        void goClicked();
+        //void goClicked();
 };
 
 #endif // __MAINAPP_H__

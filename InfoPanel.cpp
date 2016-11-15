@@ -97,7 +97,7 @@ InfoPanel::InfoPanel(QWidget *parent, QBoxLayout *layout, Business & business):
     reader.setClipRect(QRect(0,
         STARS_IMG_OFFSET +((int)((double)business.Rating*2)-1)*STARS_IMG_HEIGHT, STARS_IMG_WIDTH, STARS_IMG_HEIGHT));
     const QImage image = reader.read();
-    imgRatingLabel.setPixmap(QPixmap::fromImage(image).scaled(QSize(parent->width() / 4, 69), Qt::KeepAspectRatio));
+    imgRatingLabel.setPixmap(QPixmap::fromImage(image).scaled(QSize(parent->width() / 4, STARS_IMG_HEIGHT), Qt::KeepAspectRatio));
     layout->addWidget(&imgRatingLabel);
     layout->setAlignment(&imgRatingLabel, Qt::AlignTop | Qt::AlignHCenter);
 
@@ -112,7 +112,7 @@ InfoPanel::InfoPanel(QWidget *parent, QBoxLayout *layout, Business & business):
     cancelButton->setFont(font);
     goButton->setFont(font);
 
-    connect(this, SIGNAL(accepted()), parent, SLOT(goClicked()));
+    //connect(this, SIGNAL(accepted()), parent, SLOT(goClicked()));
 }
 
 InfoPanel::~InfoPanel()
