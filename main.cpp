@@ -57,13 +57,19 @@ int main(int argc, char *argv[])
     
     /* then, check that Genivi API is available: */
     if (mainapp.CheckGeniviApi() < 0)
+    {
+        cerr << "Error: Genivi API is  not available" << endl;
         return -1;
+    }
 
     /* then, authenticate connexion to POI service: */
     if (mainapp.AuthenticatePOI(credentialsFile) < 0)
+    {
+        cerr << "Error: POI server authentication failed" << endl;
         return -1;
+    }
 
-    cout << "authentication succes !" << endl;
+    cerr << "authentication succes !" << endl;
 
     /* now, let's start monitor user inut (register callbacks): */
     if (mainapp.StartMonitoringUserInput() < 0)
