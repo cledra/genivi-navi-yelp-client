@@ -4,7 +4,8 @@
 #include "include/mapviewer.h"
 #include "include/genivi-navicore-constants.h"
 
-#define TRACE_DEBUG(fmt, args...) do { fprintf(stderr, "[%s:%d] DEBUG: " fmt "\n", __func__, __LINE__, ##args); } while(0)
+#include "../traces.h"
+//#define TRACE_DEBUG(fmt, args...) do { fprintf(stderr, "[%s:%d] DEBUG: " fmt "\n", __func__, __LINE__, ##args); } while(0)
 //#define TRACE_DEBUG(fmt, args...)
 
 #define __STDC_FORMAT_MACROS
