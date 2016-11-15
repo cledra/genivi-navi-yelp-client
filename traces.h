@@ -14,6 +14,15 @@
 #define CYAN    "\x1b[36m"
 #define NONE    "\033[0m"
 
+#ifdef NDEBUG
+
+#define TRACE_DEBUG_JSON(fmt, args...)
+#define TRACE_DEBUG(fmt, args...)
+#define TRACE_INFO(fmt, args...)
+#define TRACE_WARN(fmt, args...)
+#define TRACE_ERROR(fmt, args...)
+
+#else
 
 #define TRACE_DEBUG(fmt, args...) do { fprintf(stderr, "[%s:%d] " CYAN "DEBUG" NONE ": " fmt "\n", __func__, __LINE__, ##args); } while(0)
 #define TRACE_INFO(fmt, args...)  do { fprintf(stderr, "[%s:%d] " GREEN "INFO" NONE ":  " fmt "\n", __func__, __LINE__, ##args); } while(0)
@@ -26,4 +35,7 @@
 #define TRACE_WARN(fmt, args...)
 #define TRACE_ERROR(fmt, args...)
 */
+
+#endif
+
 #endif // __TRACE_H__
