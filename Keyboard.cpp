@@ -11,6 +11,7 @@
 
 #define NEXT_ROW_MARKER 0
 #define NEXT_COL_MARKER 1
+#define KEY_WIDTH 60
 
 struct KeyboardLayoutEntry{
     int key;
@@ -98,7 +99,6 @@ KeyboardLayoutEntry keyboardLayout[] = {
     { Qt::Key_J, "j", "J" },
     { Qt::Key_K, "k", "K" },
     { Qt::Key_L, "l", "L" },
-    { Qt::Key_Apostrophe, "'", "'" },
     { NEXT_ROW_MARKER, 0, 0 },
     { Qt::Key_Y, "z", "Z" },
     { Qt::Key_X, "x", "X" },
@@ -107,10 +107,13 @@ KeyboardLayoutEntry keyboardLayout[] = {
     { Qt::Key_B, "b", "B" },
     { Qt::Key_N, "n", "N" },
     { Qt::Key_M, "m", "M" },
+    { Qt::Key_Comma, ",", "," },
+    { NEXT_ROW_MARKER, 0, 0 },
+    { Qt::Key_Apostrophe, "'", "'" },
     { Qt::Key_Minus, "-", "-" },
+    { Qt::Key_Space, " ", "" },
     { Qt::Key_Slash, "/", "/" },
-    { Qt::Key_Exclam, "!", "!" },
-    { Qt::Key_Space, " ", "Space" },
+    { Qt::Key_Exclam, "!", "!" }
 };
 
 const static int layoutSize = (sizeof(keyboardLayout) /
@@ -119,7 +122,19 @@ const static int layoutSize = (sizeof(keyboardLayout) /
 Keyboard::Keyboard(QWidget *parent)
     : QWidget(parent)
 {
-    QGridLayout *gridLayout = new QGridLayout(this);
+    int nbRowMarkers = 1;
+    for (int i = 0; i < layoutSize; ++i)
+        if (keyboardLayout[i].key == NEXT_ROW_MARKER)
+            nbRowMarkers++;
+    
+    QVBoxLayout *vboxLayout = new QVBoxLayout(this);
+    QGridLayout *rows[nbRowMarkers];
+    for (int i=0; i<nbRowMarkers; i++)
+    {
+        rows[i] = new QGridLayout(NULL);
+        vboxLayout->insertLayout(i, rows[i]);
+        rows[i]->setContentsMargins(KEY_WIDTH*i/2, 0, KEY_WIDTH*i/2, 0);
+    }
 
     QSignalMapper *mapper = new QSignalMapper(this);
     connect(mapper, SIGNAL(mapped(int)), SLOT(buttonClicked(int)));
@@ -135,26 +150,25 @@ Keyboard::Keyboard(QWidget *parent)
             column = 0;
             continue;
         }
-        else if (keyboardLayout[i].key == NEXT_COL_MARKER)
-        {
-            column++;
-            continue;
-        }
 
         QPushButton *button = new QPushButton;
         QFont font = button->font();
-        font.setPointSize(20);
+        font.setPointSize(19);
         button->setFont(font);
-        button->setFixedWidth(60);
-        button->setFixedHeight(40);
-        if (keyboardLayout[i].key == Qt::Key_Backspace || keyboardLayout[i].key == Qt::Key_Space)
-            button->setFixedWidth(90);
+        button->setFixedHeight(33);
+        if (keyboardLayout[i].key == Qt::Key_Backspace)
+            button->setFixedWidth(KEY_WIDTH*1.5);
+        else if (keyboardLayout[i].key == Qt::Key_Space)
+            button->setFixedWidth(220);
+        else
+            button->setFixedWidth(KEY_WIDTH);
+
         button->setText(QString::fromLatin1(keyboardLayout[i].upperlabel));
 
         mapper->setMapping(button, keyboardLayout[i].key);
         connect(button, SIGNAL(clicked()), mapper, SLOT(map()));
 
-        gridLayout->addWidget(button, row, column);
+        rows[row]->addWidget(button, 0, column);
         column++;
     }
 }
