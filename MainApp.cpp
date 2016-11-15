@@ -197,8 +197,6 @@ void MainApp::ShowKeyboard(bool show)
 
 void MainApp::textChanged(const QString & text)
 {
-    double currentLatitude, currentLongitude;
-
     TRACE_INFO("New text is: %s", qPrintable(text));
 
     /* do not handle text input if info panel is displayed: */
@@ -319,6 +317,13 @@ void MainApp::ParseJsonBusinessList(const char* buf, std::vector<Business> & Out
                             NewBusiness.Rating = json_object_get_double(medi_array_obj_elem);
                             free(medi_array_obj_elem);
                             TRACE_DEBUG_JSON("got Rating : %f", NewBusiness.Rating);
+                        }
+
+                        if (json_object_object_get_ex(medi_array_obj, "distance", &medi_array_obj_elem))
+                        {
+                            NewBusiness.Distance = json_object_get_double(medi_array_obj_elem);
+                            free(medi_array_obj_elem);
+                            TRACE_DEBUG_JSON("got Distance : %f", NewBusiness.Distance);
                         }
 
                         if (json_object_object_get_ex(medi_array_obj, "review_count", &medi_array_obj_elem))
@@ -648,6 +653,13 @@ void MainApp::networkReplySearch(QNetworkReply* reply)
     pResultList->setUpdatesEnabled(false);
     for (vector<Business>::iterator it = Businesses.begin(); it != Businesses.end(); it++)
     {
+        /*  workaround to avoid entries with wrong coordinates returned by Yelp: */
+        if (IsCoordinatesConsistent(*it) == false)
+        {
+            Businesses.erase(it--);
+            continue;
+        }
+
         QTreeWidgetItem * item = new QTreeWidgetItem(pResultList);
         item->setText(0, (*it).Name);
         item->setText(1, (*it).Address + QString(", ") + (*it).City);
@@ -662,6 +674,37 @@ void MainApp::networkReplySearch(QNetworkReply* reply)
 
     mutex.unlock();
 }
+
+/* Well... some of the POI returned by Yelp have coordinates which are
+ * completely inconsistent with the distance at which the POI is
+ * supposed to be.
+ * https://github.com/Yelp/yelp-fusion/issues/104
+ * Let's skip them for the moment: */
+#define PI 3.14159265
+#define EARTH_RADIUS 6371000
+static inline double toRadians(double a) { return a * PI / 180.0; }
+bool MainApp::IsCoordinatesConsistent(Business & business)
+{
+    double lat1 = toRadians(currentLatitude);
+    double lon1 = toRadians(currentLongitude);
+    double lat2 = toRadians(business.Latitude);
+    double lon2 = toRadians(business.Longitude);
+    double x = (lon2 - lon1) * cos((lat1 + lat2)/2);
+    double y = lat2 - lat1;
+    double DistanceFromCoords = EARTH_RADIUS * sqrt(pow(x, 2) + pow(y, 2));
+
+    /* if calculated distance is not between +/- 1% of the announced
+     * distance -> skip this POI: */
+    if (DistanceFromCoords < business.Distance * 0.99 ||
+        DistanceFromCoords > business.Distance * 1.01)
+    {
+        TRACE_ERROR("Announced distance: %f, calculated distance: %f", business.Distance, DistanceFromCoords);
+        return false;
+    }
+
+    return true;
+}
+/* end of workaround */
 
 int MainApp::CheckGeniviApi()
 {

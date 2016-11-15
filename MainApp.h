@@ -33,6 +33,7 @@ class MainApp: public QMainWindow
         void Expand(bool expand);
         void DisplayInformation();
         void SetDestination(double latitude = 0.0, double longitude = 0.0);
+        bool IsCoordinatesConsistent(Business & business);
 
         uint32_t navicoreSession;
         QMutex mutex; // to protect 'pSearchReply' from concurrent access
@@ -49,6 +50,9 @@ class MainApp: public QMainWindow
         InfoPanel *infoPanel;
         bool isInfoScreen;
         bool isKeyboard;
+
+        double currentLatitude;
+        double currentLongitude;
 
     private slots:
         void textChanged(const QString & text);
