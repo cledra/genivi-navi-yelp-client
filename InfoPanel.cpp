@@ -94,8 +94,13 @@ InfoPanel::InfoPanel(QWidget *parent, QBoxLayout *layout, Business & business):
 
     /* Rating image: */
     QImageReader reader(QString(":/images/stars_map_www.png"));
+    int RatingImgIndex = (int)((double)business.Rating*2)-1;
+    if (RatingImgIndex < 0)
+    {
+        RatingImgIndex = 0;
+    }
     reader.setClipRect(QRect(0,
-        STARS_IMG_OFFSET +((int)((double)business.Rating*2)-1)*STARS_IMG_HEIGHT, STARS_IMG_WIDTH, STARS_IMG_HEIGHT));
+        STARS_IMG_OFFSET + RatingImgIndex*STARS_IMG_HEIGHT, STARS_IMG_WIDTH, STARS_IMG_HEIGHT));
     const QImage image = reader.read();
     imgRatingLabel.setPixmap(QPixmap::fromImage(image).scaled(QSize(parent->width() / 4, STARS_IMG_HEIGHT), Qt::KeepAspectRatio));
     layout->addWidget(&imgRatingLabel);
