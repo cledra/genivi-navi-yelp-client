@@ -286,6 +286,7 @@ void MainApp::ParseJsonBusinessList(const char* buf, std::vector<Business> & Out
     if (!jobj)
     {
         TRACE_ERROR("json_tokener_parse failed");
+        cerr << "json_tokener_parse failed: " << buf << endl;
         return;
     }
 
@@ -639,6 +640,7 @@ void MainApp::networkReplySearch(QNetworkReply* reply)
     }
     
     buflen = reply->read(buf, BIG_BUFFER_SIZE-1);
+    buf[buflen] = '\0';
 
     /* empty our business list, and replace its content with the reply's content: */
     Businesses.clear();
