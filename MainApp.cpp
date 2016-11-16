@@ -695,10 +695,10 @@ bool MainApp::IsCoordinatesConsistent(Business & business)
     double y = lat2 - lat1;
     double DistanceFromCoords = EARTH_RADIUS * sqrt(pow(x, 2) + pow(y, 2));
 
-    /* if calculated distance is not between +/- 1% of the announced
+    /* if calculated distance is not between +/- 10% of the announced
      * distance -> skip this POI: */
-    if (DistanceFromCoords < business.Distance * 0.99 ||
-        DistanceFromCoords > business.Distance * 1.01)
+    if (DistanceFromCoords < business.Distance * 0.9 ||
+        DistanceFromCoords > business.Distance * 1.1)
     {
         TRACE_ERROR("Announced distance: %f, calculated distance: %f", business.Distance, DistanceFromCoords);
         return false;
