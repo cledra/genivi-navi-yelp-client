@@ -34,6 +34,7 @@ class MainApp: public QMainWindow
         void DisplayInformation();
         void SetDestination(double latitude = 0.0, double longitude = 0.0);
         bool IsCoordinatesConsistent(Business & business);
+        int DisplayResultList(std::vector<Business> & list, int focusIndex = 0);
 
         uint32_t navicoreSession;
         QMutex mutex; // to protect 'pSearchReply' from concurrent access
@@ -53,6 +54,8 @@ class MainApp: public QMainWindow
 
         double currentLatitude;
         double currentLongitude;
+        QString currentSearchText;
+        int currentIndex;
 
     private slots:
         void textChanged(const QString & text);

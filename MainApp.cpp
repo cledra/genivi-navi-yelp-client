@@ -37,7 +37,9 @@ MainApp::MainApp():
     window(Q_NULLPTR, Qt::FramelessWindowHint),layout(&window),
     lineEdit(&window),token(""),networkManager(this),pSearchReply(NULL),
     pResultList(new QTreeWidget(&window)),keyboard(&window),infoPanel(NULL),
-    isInfoScreen(false),isKeyboard(false)
+    isInfoScreen(false),isKeyboard(false),
+    currentLatitude(0.0),currentLongitude(0.0),currentSearchText(""),
+    currentIndex(0)
 {
     window.setStyleSheet("background-color: rgba(235, 235, 235);");
     //window.setAttribute(Qt::WA_TranslucentBackground);
@@ -134,7 +136,6 @@ void MainApp::Expand(bool expand)
 
         window.setGeometry(window.pos().x(), window.pos().y(), WIDGET_WIDTH, lineEdit.height() + (isKeyboard ? keyboard.height() : 0) + h + 50);
 
-        pResultList->setCurrentItem(pResultList->topLevelItem(0));
         pResultList->resize(lineEdit.width(), h);
 
         pResultList->setColumnWidth(0, pResultList->width() / 2);
@@ -210,6 +211,14 @@ void MainApp::textChanged(const QString & text)
     if (text.length() == 0) /* if empty text -> no search */
     {
         Expand(false);      /* shrink display to minimum */
+        mutex.unlock();
+        return;
+    }
+
+    /* if text is the same as previous search -> no need to search again */
+    if (text == currentSearchText)
+    {
+        DisplayResultList(Businesses, currentIndex);
         mutex.unlock();
         return;
     }
@@ -560,6 +569,11 @@ void MainApp::SetDestination(double latitude, double longitude)
     wrapper.NavicoreSetWaypoints(navicoreSession, myRoute, true, myWayPoints);
 
     wrapper.NavicoreCalculateRoute(navicoreSession, myRoute);
+
+    /* reset search: */
+    currentSearchText = tr("");
+    currentIndex = 0;
+    Businesses.clear();
 }
 
 void MainApp::DisplayInformation()
@@ -572,14 +586,13 @@ void MainApp::DisplayInformation()
     }
 
     /* select the first selected item : */
-    int index = pResultList->indexOfTopLevelItem(*SelectedItems.begin());
-    TRACE_DEBUG("index is: %d", index);
+    currentIndex = pResultList->indexOfTopLevelItem(*SelectedItems.begin());
 
     /* Resize window: */
     Expand(false);
 
     /* Display info for the selected item: */
-    infoPanel = new InfoPanel(this, &layout, Businesses[index]);
+    infoPanel = new InfoPanel(this, &layout, Businesses[currentIndex]);
     TRACE_INFO("infoPanel = %p", infoPanel);
 
     layout.addWidget(infoPanel);
@@ -631,6 +644,9 @@ void MainApp::networkReplySearch(QNetworkReply* reply)
     
     mutex.lock();
 
+    /* memorize the text which gave this result: */
+    currentSearchText = lineEdit.text();
+
     // we only handle this callback if it matches the last search request:
     if (reply != pSearchReply)
     {
@@ -642,23 +658,30 @@ void MainApp::networkReplySearch(QNetworkReply* reply)
     buflen = reply->read(buf, BIG_BUFFER_SIZE-1);
     buf[buflen] = '\0';
 
-    /* empty our business list, and replace its content with the reply's content: */
+    currentIndex = 0;
     Businesses.clear();
     ParseJsonBusinessList(buf, Businesses);
+    DisplayResultList(Businesses);
+    
+    mutex.unlock();
+}
 
-    pResultList->clear();
-
+int MainApp::DisplayResultList(vector<Business> & list, int focusIndex)
+{
+    int nbElem = 0;
     const QPalette &pal = lineEdit.palette();
     QColor color = pal.color(QPalette::Disabled, QPalette::WindowText);
 
-    /* filling the dropdown menu: */
     pResultList->setUpdatesEnabled(false);
-    for (vector<Business>::iterator it = Businesses.begin(); it != Businesses.end(); it++)
+    pResultList->clear();
+
+    /* filling the dropdown menu: */
+    for (vector<Business>::iterator it = list.begin(); it != list.end(); it++)
     {
         /*  workaround to avoid entries with wrong coordinates returned by Yelp: */
         if (IsCoordinatesConsistent(*it) == false)
         {
-            Businesses.erase(it--);
+            list.erase(it--);
             continue;
         }
 
@@ -667,14 +690,17 @@ void MainApp::networkReplySearch(QNetworkReply* reply)
         item->setText(1, (*it).Address + QString(", ") + (*it).City);
         item->setTextAlignment(1, Qt::AlignRight);
         item->setTextColor(1, color);
+        if (nbElem == focusIndex)
+        {
+            pResultList->setCurrentItem(item); 
+        }
+        nbElem++;
     }
 
-    //pResultList->setCurrentItem(pResultList->topLevelItem(0));
+    Expand(true);
     pResultList->setUpdatesEnabled(true);
 
-    Expand(true);
-
-    mutex.unlock();
+    return nbElem;
 }
 
 /* Well... some of the POI returned by Yelp have coordinates which are
