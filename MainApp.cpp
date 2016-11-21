@@ -112,7 +112,7 @@ void MainApp::UpdateAglSurfaces()
     system(cmd);
 }
 
-void MainApp::Expand(bool expand)
+void MainApp::Expand(bool expand, bool repaint)
 {
     if (expand)
     {
@@ -159,10 +159,10 @@ void MainApp::Expand(bool expand)
         window.adjustSize();
     }
 
-    if (getenv("AGL_NAVI"))
+    if (repaint && getenv("AGL_NAVI"))
     {
         QTimer timer(this);
-        timer.singleShot(0, this, SLOT(UpdateAglSurfaces()));
+        timer.singleShot(100, this, SLOT(UpdateAglSurfaces()));
     }
 }
 
@@ -455,9 +455,9 @@ bool MainApp::eventFilter(QObject *obj, QEvent *ev)
     {
         //TRACE_DEBUG("ev->type() = %d", (int)ev->type());
 
-        if (ev->type() == QEvent::HideToParent)
+        if (lineEdit.hasSelectedText())
         {
-            /* that's no reason to select the text, is it ? */
+            /* I never want the text to be selected, but sometimes it is (why ??) */
             lineEdit.deselect();
         }
 
@@ -589,7 +589,7 @@ void MainApp::DisplayInformation()
     currentIndex = pResultList->indexOfTopLevelItem(*SelectedItems.begin());
 
     /* Resize window: */
-    Expand(false);
+    Expand(false, false);
 
     /* Display info for the selected item: */
     infoPanel = new InfoPanel(this, &layout, Businesses[currentIndex]);
@@ -609,6 +609,8 @@ void MainApp::DisplayInformation()
 
     int res = infoPanel->exec(); // wait for user to click
 
+    mutex.lock();
+
     if (res == QDialog::Accepted)
     {
         double latitude, longitude;
@@ -622,19 +624,19 @@ void MainApp::DisplayInformation()
     delete infoPanel;
     infoPanel = NULL;
 
-    QString oldText = lineEdit.text();
-    lineEdit.setText(tr(""));
 
     if (res == QDialog::Rejected)
     {
-        lineEdit.setText(oldText);
+        Expand(false, false);
+        DisplayResultList(Businesses, currentIndex);
     }
 
-    /*if (getenv("AGL_NAVI")) // TODO: check
+    mutex.unlock();
+
+    if (res == QDialog::Accepted)
     {
-        QTimer timer(this);
-        timer.singleShot(0, this, SLOT(UpdateAglSurfaces()));
-    }*/
+        lineEdit.setText(tr(""));
+    }
 }
 
 void MainApp::networkReplySearch(QNetworkReply* reply)

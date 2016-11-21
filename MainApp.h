@@ -30,7 +30,7 @@ class MainApp: public QMainWindow
         void ParseJsonBusinessList(const char* buf, std::vector<Business> & Output);
         bool eventFilter(QObject *obj, QEvent *ev);
         void ShowKeyboard(bool show = true);
-        void Expand(bool expand);
+        void Expand(bool expand, bool repaint = true);
         void DisplayInformation();
         void SetDestination(double latitude = 0.0, double longitude = 0.0);
         bool IsCoordinatesConsistent(Business & business);
