@@ -325,42 +325,36 @@ void MainApp::ParseJsonBusinessList(const char* buf, std::vector<Business> & Out
                         if (json_object_object_get_ex(medi_array_obj, "rating", &medi_array_obj_elem))
                         {
                             NewBusiness.Rating = json_object_get_double(medi_array_obj_elem);
-                            free(medi_array_obj_elem);
                             TRACE_DEBUG_JSON("got Rating : %f", NewBusiness.Rating);
                         }
 
                         if (json_object_object_get_ex(medi_array_obj, "distance", &medi_array_obj_elem))
                         {
                             NewBusiness.Distance = json_object_get_double(medi_array_obj_elem);
-                            free(medi_array_obj_elem);
                             TRACE_DEBUG_JSON("got Distance : %f", NewBusiness.Distance);
                         }
 
                         if (json_object_object_get_ex(medi_array_obj, "review_count", &medi_array_obj_elem))
                         {
                             NewBusiness.ReviewCount = json_object_get_int(medi_array_obj_elem);
-                            free(medi_array_obj_elem);
                             TRACE_DEBUG_JSON("got ReviewCount : %u", NewBusiness.ReviewCount);
                         }
 
                         if (json_object_object_get_ex(medi_array_obj, "name", &medi_array_obj_elem))
                         {
                             NewBusiness.Name = QString(json_object_get_string(medi_array_obj_elem));
-                            free(medi_array_obj_elem);
                             TRACE_DEBUG_JSON("got Name : %s", qPrintable(NewBusiness.Name));
                         }
 
                         if (json_object_object_get_ex(medi_array_obj, "image_url", &medi_array_obj_elem))
                         {
                             NewBusiness.ImageUrl = QString(json_object_get_string(medi_array_obj_elem));
-                            free(medi_array_obj_elem);
                             TRACE_DEBUG_JSON("got ImageUrl : %s", qPrintable(NewBusiness.ImageUrl));
                         }
 
                         if (json_object_object_get_ex(medi_array_obj, "phone", &medi_array_obj_elem))
                         {
                             NewBusiness.Phone = QString(json_object_get_string(medi_array_obj_elem));
-                            free(medi_array_obj_elem);
                             TRACE_DEBUG_JSON("got Phone : %s", qPrintable(NewBusiness.Phone));
                         }
 
@@ -373,18 +367,14 @@ void MainApp::ParseJsonBusinessList(const char* buf, std::vector<Business> & Out
                             if(json_object_object_get_ex(medi_array_obj_elem, "latitude", &value2))
                             {
                                 NewBusiness.Latitude = json_object_get_double(value2);
-                                free(value2);
                                 TRACE_DEBUG_JSON("got Latitude : %f", NewBusiness.Latitude);
                             }
 
                             if(json_object_object_get_ex(medi_array_obj_elem, "longitude", &value2))
                             {
                                 NewBusiness.Longitude = json_object_get_double(value2);
-                                free(value2);
                                 TRACE_DEBUG_JSON("got Longitude : %f", NewBusiness.Longitude);
                             }
-                                    
-                            free(medi_array_obj_elem);
                         }
 
                         if (json_object_object_get_ex(medi_array_obj, "location", &medi_array_obj_elem))
@@ -397,56 +387,45 @@ void MainApp::ParseJsonBusinessList(const char* buf, std::vector<Business> & Out
                             if(json_object_object_get_ex(medi_array_obj_elem, "address1", &value2))
                             {
                                 NewBusiness.Address = QString(json_object_get_string(value2));
-                                free(value2);
                                 TRACE_DEBUG_JSON("got Address : %s", qPrintable(NewBusiness.Address));
                             }
 
                             if(json_object_object_get_ex(medi_array_obj_elem, "city", &value2))
                             {
                                 NewBusiness.City = QString(json_object_get_string(value2));
-                                free(value2);
                                 TRACE_DEBUG_JSON("got City : %s", qPrintable(NewBusiness.City));
                             }
 
                             if(json_object_object_get_ex(medi_array_obj_elem, "state", &value2))
                             {
                                 NewBusiness.State = QString(json_object_get_string(value2));
-                                free(value2);
                                 TRACE_DEBUG_JSON("got State : %s", qPrintable(NewBusiness.State));
                             }
 
                             if(json_object_object_get_ex(medi_array_obj_elem, "zip_code", &value2))
                             {
                                 NewBusiness.ZipCode = QString(json_object_get_string(value2));
-                                free(value2);
                                 TRACE_DEBUG_JSON("got ZipCode : %s", qPrintable(NewBusiness.ZipCode));
                             }
 
                             if(json_object_object_get_ex(medi_array_obj_elem, "country", &value2))
                             {
                                 NewBusiness.Country = QString(json_object_get_string(value2));
-                                free(value2);
                                 TRACE_DEBUG_JSON("got Country : %s", qPrintable(NewBusiness.Country));
                             }
-
-                            free(medi_array_obj_elem);
                         }
 
                         /* TODO: parse categories */
 
                         /* Add business in our list: */
                         Businesses.push_back(NewBusiness);
-
-                        free(medi_array_obj);
                     }
                 }
-
-                free(value);
             }
         }
     }
 
-    free(jobj);
+    json_object_put(jobj);
 }
 
 bool MainApp::eventFilter(QObject *obj, QEvent *ev)
@@ -660,6 +639,12 @@ void MainApp::networkReplySearch(QNetworkReply* reply)
     buflen = reply->read(buf, BIG_BUFFER_SIZE-1);
     buf[buflen] = '\0';
 
+    if (buflen == 0)
+    {
+        mutex.unlock();
+        return;
+    }
+
     currentIndex = 0;
     Businesses.clear();
     ParseJsonBusinessList(buf, Businesses);
@@ -815,6 +800,14 @@ int MainApp::AuthenticatePOI(const QString & CredentialsFile)
         int buflen;
         json_object *jobj;
         buflen = reply->read(buf, 1023);
+        buf[buflen] = '\0';
+
+        if (buflen == 0)
+        {
+            delete reply;
+            return -1;
+        }
+        
         TRACE_DEBUG("reply is: %s", buf);
 
         jobj = json_tokener_parse(buf);
@@ -835,13 +828,12 @@ int MainApp::AuthenticatePOI(const QString & CredentialsFile)
                 {
                     TRACE_INFO("token was found");
                     token = QString(json_object_get_string(value));
-                    free(value);
                     break;
                 }
             }
         }
 
-        free(jobj);
+        json_object_put(jobj);
     }
     else
     {
