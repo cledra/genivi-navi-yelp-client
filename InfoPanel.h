@@ -2,33 +2,33 @@
 #define __INFO_PANEL_H__
 
 #include <QWidget>
-#include <QLabel>
 #include <QNetworkAccessManager>
-#include <QBoxLayout>
-#include <QMessageBox>
-#include "Business.h"
+#include <QRect>
+#include <QPushButton>
 
-class InfoPanel: public QMessageBox
+#include "Business.h"
+#include "InfoPanelLabel.h"
+
+class InfoPanel
 {
-    Q_OBJECT
-    
     public:
-        InfoPanel(QWidget *parent, QBoxLayout *layout, Business & business);
-        virtual ~InfoPanel();
-        bool getCoords(double &lat, double &lon);
+        InfoPanel(QWidget *parent, Business & business, QRect rect);
+        virtual ~InfoPanel(){}
+        QPushButton * getCancelButton() { return &cancelButton; }
+        QPushButton * getGoButton() { return &goButton; }
 
     private:
-        QBoxLayout *pLayout;
-        QLabel nameLabel;
-        QLabel imageLabel;
-        QLabel addressLabel;
-        QLabel zipCodeCityLabel;
-        QLabel phoneLabel;
-        QLabel imgRatingLabel;
-        QLabel nbReviewsLabel;
+        InfoPanelLabel nameLabel;
+        InfoPanelLabel imageLabel;
+        InfoPanelLabel addressLabel;
+        InfoPanelLabel phoneLabel;
+        InfoPanelLabel imgRatingLabel;
+        InfoPanelLabel nbReviewsLabel;
+        InfoPanelLabel btnsBackground;
+        QPushButton cancelButton;
+        QPushButton goButton;
         QNetworkAccessManager networkManager;
-
-        double latitude, longitude;
+        QFont font, fontBold;
 };
 
 #endif // __INFO_PANEL_H__

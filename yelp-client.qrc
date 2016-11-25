@@ -1,6 +1,7 @@
 <!DOCTYPE RCC><RCC version="1.0">
   <qresource>
     <file>images/stars_map_www.png</file>
+    <file>images/loupe-90.png</file>
     <file>fonts/DroidSansJapanese.ttf</file>
   </qresource>
 </RCC>

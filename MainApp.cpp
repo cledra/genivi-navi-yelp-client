@@ -1,5 +1,3 @@
-#include <QtWidgets>
-#include <QNetworkAccessManager>
 #include <QNetworkReply>
 #include <QNetworkRequest>
 #include <QUrl>
@@ -16,7 +14,8 @@
 #include "MainApp.h"
 #include "Business.h"
 #include "InfoPanel.h"
-#include "Keyboard.h"
+#include "ClickableLabel.h"
+//#include "Keyboard.h"
 #include "libgeniviwrapper/GeniviWrapper.h"
 #include "libgeniviwrapper/include/genivi-navicore-constants.h"
 #include "traces.h"
@@ -28,48 +27,64 @@
 
 #define BIG_BUFFER_SIZE     (1024*1024)
 #define FONT_SIZE_LINEDIT   20
-#define WIDGET_WIDTH        800
+#define FONT_SIZE_LIST      14
+#define TEXT_INPUT_WIDTH    500
+#define SEARCH_BTN_SIZE     105
+#define SPACER              15
+#define WIDGET_WIDTH        (SEARCH_BTN_SIZE + SPACER + TEXT_INPUT_WIDTH)
+#define RESULT_LIST_WIDTH   TEXT_INPUT_WIDTH
+#define RESULT_LIST_HEIGHT  480
+#define RESULT_ITEM_HEIGHT  80
+#define INFO_WIDTH          TEXT_INPUT_WIDTH
+#define INFO_HEIGHT         480
+#define MARGINS             25
 
 using namespace std;
 
 MainApp::MainApp():
-    navicoreSession(0),mutex(),wrapper(),
-    window(Q_NULLPTR, Qt::FramelessWindowHint),layout(&window),
-    lineEdit(&window),token(""),networkManager(this),pSearchReply(NULL),
-    pResultList(new QTreeWidget(&window)),keyboard(&window),infoPanel(NULL),
-    isInfoScreen(false),isKeyboard(false),
+    navicoreSession(0),mutex(QMutex::Recursive),wrapper(),
+    window(Q_NULLPTR, Qt::FramelessWindowHint),
+    token(""),networkManager(this),pSearchReply(NULL),
+    searchBtn(QIcon(tr(":/images/loupe-90.png")), tr(""), &window),
+    isInfoScreen(false),
+    isInputDisplayed(false),
+    lineEdit(&window),resultList(&window),pInfoPanel(NULL),
     currentLatitude(0.0),currentLongitude(0.0),currentSearchText(""),
     currentIndex(0)
 {
-    window.setStyleSheet("background-color: rgba(235, 235, 235);");
-    //window.setAttribute(Qt::WA_TranslucentBackground);
+    window.setAttribute(Qt::WA_TranslucentBackground);
+    window.setStyleSheet("border: none;");
 
-    keyboard.hide();
+    //keyboard.hide();
+
+    searchBtn.setStyleSheet("border: none;");
+    searchBtn.setMinimumSize(QSize(SEARCH_BTN_SIZE, SEARCH_BTN_SIZE));
+    searchBtn.setIconSize(searchBtn.size());
+    searchBtn.setGeometry(QRect(0, 0, searchBtn.width(), searchBtn.height()));
+
+    lineEdit.setStyleSheet("border: none;");
+    lineEdit.setMinimumSize(QSize(TEXT_INPUT_WIDTH, SEARCH_BTN_SIZE));
 
     lineEdit.setPlaceholderText(QString(DEFAULT_TEXT));
     QFont font = lineEdit.font();
     font.setPointSize(FONT_SIZE_LINEDIT);
     lineEdit.setFont(font);
+    lineEdit.setTextMargins(MARGINS/2, 0, 0, 0);
     lineEdit.installEventFilter(this);
+    lineEdit.setVisible(false);
 
-    window.setMinimumWidth(WIDGET_WIDTH);
-
-    window.setLayout(&layout);
-    layout.addWidget(&lineEdit);
-
-    pResultList->setColumnCount(2);
-    pResultList->setUniformRowHeights(true);
-    pResultList->setRootIsDecorated(false);
-    pResultList->setEditTriggers(QTreeWidget::NoEditTriggers);
-    pResultList->setSelectionBehavior(QTreeWidget::SelectRows);
-    pResultList->setFrameStyle(QFrame::Box | QFrame::Plain);
-    pResultList->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
-    pResultList->setVerticalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
-    pResultList->header()->hide();
-    pResultList->setFont(font);
-    pResultList->installEventFilter(this);
-
-    Expand(false);
+    resultList.setStyleSheet("border: none;");
+    resultList.setRootIsDecorated(false);
+    resultList.setEditTriggers(QTreeWidget::NoEditTriggers);
+    resultList.setSelectionBehavior(QTreeWidget::SelectRows);
+    resultList.setFrameStyle(QFrame::Box | QFrame::Plain);
+    resultList.setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+    resultList.setVerticalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+    resultList.header()->hide();
+    font.setPointSize(FONT_SIZE_LIST);
+    resultList.setFont(font);
+    resultList.installEventFilter(this);
+    resultList.setVisible(false);
 
     /* We might need a Japanese font: */
     QFile fontFile(":/fonts/DroidSansJapanese.ttf");
@@ -86,6 +101,7 @@ MainApp::MainApp():
         }
     }
 
+    window.setGeometry(QRect(window.pos().x(), window.pos().y(), searchBtn.width(), searchBtn.height()));
     window.show();
 }
 
@@ -93,7 +109,35 @@ MainApp::~MainApp()
 {
     mutex.lock();
     delete pSearchReply;
-    delete pResultList;
+    mutex.unlock();
+}
+
+void MainApp::searchBtnClicked()
+{
+    isInputDisplayed = !isInputDisplayed;
+    TRACE_DEBUG("isInputDisplayed = %d", isInputDisplayed);
+    DisplayLineEdit(isInputDisplayed);
+}
+
+void MainApp::DisplayLineEdit(bool display)
+{
+    mutex.lock();
+    if (display)
+    {
+        lineEdit.setGeometry(QRect(searchBtn.width()+SPACER, 0, lineEdit.width(), lineEdit.height()));
+        lineEdit.setVisible(true);
+        window.setGeometry(QRect(window.pos().x(), window.pos().y(), WIDGET_WIDTH, searchBtn.height()));
+        lineEdit.setFocus();
+    }
+    else
+    {
+        DisplayResultList(false);
+        DisplayInformation(false);
+        lineEdit.setText(tr(""));
+        lineEdit.setVisible(false);
+        window.setGeometry(QRect(window.pos().x(), window.pos().y(), searchBtn.width(), searchBtn.height()));
+    }
+    isInputDisplayed = display;
     mutex.unlock();
 }
 
@@ -112,88 +156,26 @@ void MainApp::UpdateAglSurfaces()
     system(cmd);
 }
 
-void MainApp::Expand(bool expand, bool repaint)
+void MainApp::DisplayResultList(bool display)
 {
-    if (expand)
+    mutex.lock();
+    if (display)
     {
-        /* Make space to display the QLineEdit + keyboard + result list : */
-
-        int h = pResultList->sizeHintForRow(0) * (Businesses.size() + 1);
-
-        if (isKeyboard && !keyboard.isVisible())
-        {
-            layout.addWidget(&keyboard);
-            keyboard.show();
-            keyboard.move(QPoint(lineEdit.pos().x(), lineEdit.pos().y() + lineEdit.height()));
-        }
-
-        if (!pResultList->isVisible())
-        {
-            layout.addWidget(pResultList);
-            pResultList->show();
-            pResultList->move(QPoint(lineEdit.pos().x(), lineEdit.pos().y() + lineEdit.height() + (isKeyboard ? keyboard.height() : 0)));
-        }
-
-        window.setGeometry(window.pos().x(), window.pos().y(), WIDGET_WIDTH, lineEdit.height() + (isKeyboard ? keyboard.height() : 0) + h + 50);
-
-        pResultList->resize(lineEdit.width(), h);
-
-        pResultList->setColumnWidth(0, pResultList->width() / 2);
-        pResultList->setColumnWidth(1, pResultList->width() / 2);
-        pResultList->setFocus();
+        resultList.setGeometry(QRect(   searchBtn.width()+SPACER, searchBtn.height()+SPACER,
+                                        RESULT_LIST_WIDTH, RESULT_LIST_HEIGHT));
+        window.setGeometry(QRect(   window.pos().x(), window.pos().y(),
+                                    WIDGET_WIDTH,
+                                    searchBtn.height()+SPACER+resultList.height()));
+        resultList.setVisible(true);
+        resultList.setFocus();
     }
     else
     {
-        /* Shrink space to only display the QLineEdit field : */
-
-        pResultList->clear();
-        pResultList->hide();
-        layout.removeWidget(pResultList);
-        if (isKeyboard)
-        {
-            keyboard.hide();
-            layout.removeWidget(&keyboard);
-        }
+        resultList.setVisible(false);
         lineEdit.setFocus();
-        lineEdit.deselect();
-        window.adjustSize();
+        window.setGeometry(QRect(window.pos().x(), window.pos().y(), WIDGET_WIDTH, searchBtn.height()));
     }
-
-    if (repaint && getenv("AGL_NAVI"))
-    {
-        QTimer timer(this);
-        timer.singleShot(100, this, SLOT(UpdateAglSurfaces()));
-    }
-}
-
-void MainApp::ShowKeyboard(bool show)
-{
-    if (show)
-    {
-        TRACE_INFO("showing keyboard");
-        /* Make space to display the QLineEdit + the keyboard : */
-
-        window.setGeometry(window.pos().x(), window.pos().y(), WIDGET_WIDTH, lineEdit.height() + keyboard.height());
-
-        layout.addWidget(&keyboard);
-        keyboard.show();
-        keyboard.setFocus();
-    }
-    else
-    {
-        TRACE_INFO("hiding keyboard");
-        keyboard.hide();
-        layout.removeWidget(&keyboard);
-        lineEdit.setFocus();
-        lineEdit.deselect();
-        window.adjustSize();
-    }
-
-    if (getenv("AGL_NAVI"))
-    {
-        QTimer timer(this);
-        timer.singleShot(0, this, SLOT(UpdateAglSurfaces()));
-    }
+    mutex.unlock();
 }
 
 void MainApp::textChanged(const QString & text)
@@ -201,7 +183,7 @@ void MainApp::textChanged(const QString & text)
     TRACE_INFO("New text is: %s", qPrintable(text));
 
     /* do not handle text input if info panel is displayed: */
-    if (infoPanel) return;
+    if (pInfoPanel) return;
 
     mutex.lock();
 
@@ -210,7 +192,7 @@ void MainApp::textChanged(const QString & text)
 
     if (text.length() == 0) /* if empty text -> no search */
     {
-        Expand(false);      /* shrink display to minimum */
+        DisplayResultList(false);
         mutex.unlock();
         return;
     }
@@ -218,7 +200,8 @@ void MainApp::textChanged(const QString & text)
     /* if text is the same as previous search -> no need to search again */
     if (text == currentSearchText)
     {
-        DisplayResultList(Businesses, currentIndex);
+        DisplayResultList(true);
+        FillResultList(Businesses, currentIndex);
         mutex.unlock();
         return;
     }
@@ -240,15 +223,15 @@ void MainApp::textChanged(const QString & text)
     TRACE_INFO("Current position: %f, %f", currentLatitude, currentLongitude);
 
     /* let's generate a search request : */
-    QString myUrlStr = URL_SEARCH + QString("?") + QString("term=") + text +
-        QString("&latitude=") + QString::number(currentLatitude) +
-        QString("&longitude=") + QString::number(currentLongitude);
+    QString myUrlStr = URL_SEARCH + tr("?") + tr("term=") + text +
+        tr("&latitude=") + QString::number(currentLatitude) +
+        tr("&longitude=") + QString::number(currentLongitude);
 
     TRACE_DEBUG("URL: %s", qPrintable(myUrlStr));
 
     QUrl myUrl = QUrl(myUrlStr);
     QNetworkRequest req(myUrl);
-    req.setRawHeader("Authorization", (QString("bearer ") + token).toLocal8Bit());
+    req.setRawHeader("Authorization", (tr("bearer ") + token).toLocal8Bit());
     pSearchReply = networkManager.get(req);
     TRACE_DEBUG("after post, reply is %p", pSearchReply);
     
@@ -257,36 +240,38 @@ void MainApp::textChanged(const QString & text)
 
 void MainApp::textAdded(const QString & text)
 {
+    mutex.lock();
     lineEdit.setText(lineEdit.text() + text);
+    mutex.unlock();
 }
 
 void MainApp::keyPressed(int key)
 {
+    mutex.lock();
     if (key == Qt::Key_Backspace)
     {
         int len = lineEdit.text().length();
         if (len > 0)
             lineEdit.setText(lineEdit.text().remove(len-1, 1));
-        else if (isKeyboard)
-            ShowKeyboard(false);
+        /*else if (isKeyboard)
+            ShowKeyboard(false);*/
     }
+    mutex.unlock();
 }
 
-void MainApp::itemClicked(QTreeWidgetItem *item, int column)
+void MainApp::itemClicked()
 {
-    (void)item;
-    (void)column;
-
+    mutex.lock();
     if (isInfoScreen)
     {
-        DisplayInformation();
+        DisplayInformation(true);
     }
     else
     {
         SetDestination();
-        lineEdit.setText(tr(""));
-        Expand(false);
+        DisplayLineEdit(false);
     }
+    mutex.unlock();
 }
 
 void MainApp::ParseJsonBusinessList(const char* buf, std::vector<Business> & Output)
@@ -430,25 +415,36 @@ void MainApp::ParseJsonBusinessList(const char* buf, std::vector<Business> & Out
 
 bool MainApp::eventFilter(QObject *obj, QEvent *ev)
 {
-    if (obj == pResultList)
+    mutex.lock();
+
+    if (obj == &resultList)
     {
         //TRACE_DEBUG("ev->type() = %d", (int)ev->type());
 
-        if (lineEdit.hasSelectedText())
+        /*if (lineEdit.hasSelectedText())
         {
-            /* I never want the text to be selected, but sometimes it is (why ??) */
-            lineEdit.deselect();
-        }
+            // I never want the text to be selected, but sometimes it is (why ??)
+            //lineEdit.deselect();
+            TRACE_WARN(" ");
+        }*/
 
-        if (ev->type() == QEvent::MouseButtonPress)
+        /*if (ev->type() == QEvent::MouseButtonRelease)
         {
-            Expand(false);
-            TRACE_DEBUG("mouse button");
-            return true;
+            if (isInfoScreen)
+            {
+                TRACE_WARN(" ");
+                DisplayResultList(false);
+                DisplayInformation(true);
+            }
+            else
+            {
+                TRACE_WARN(" ");
+                SetDestination();
+                DisplayLineEdit(false);
+            }
         }
-
-        if (ev->type() == QEvent::KeyPress) {
-
+        else*/ if (ev->type() == QEvent::KeyPress)
+        {
             bool consumed = false;
             int key = static_cast<QKeyEvent*>(ev)->key();
             TRACE_DEBUG("key pressed (%d)", key);
@@ -458,19 +454,19 @@ bool MainApp::eventFilter(QObject *obj, QEvent *ev)
                     TRACE_DEBUG("enter or return");
                     if (isInfoScreen)
                     {
-                        DisplayInformation();
+                        DisplayInformation(true);
                         break;
                     }
                     else
                     {
                         SetDestination();
-                        lineEdit.setText(tr(""));
+                        DisplayLineEdit(false);
                     }
                     consumed = true;
 
                 case Qt::Key_Escape:
                     TRACE_DEBUG("escape");
-                    Expand(false);
+                    DisplayResultList(false);
                     consumed = true;
 
                 case Qt::Key_Up:
@@ -488,41 +484,61 @@ bool MainApp::eventFilter(QObject *obj, QEvent *ev)
                     break;
             }
 
+            mutex.unlock();
             return consumed;
         }
     }
     else if (obj == &lineEdit)
     {
-        if (ev->type() == QEvent::MouseButtonRelease)
+        if (pInfoPanel && ev->type() == QEvent::KeyPress)
+        {
+            switch(static_cast<QKeyEvent*>(ev)->key())
+            {
+                case Qt::Key_Escape:
+                    TRACE_DEBUG("Escape !");
+                    DisplayInformation(false);
+                    DisplayResultList(true);
+                    break;
+                case Qt::Key_Enter:
+                case Qt::Key_Return:
+                    TRACE_DEBUG("Go !");
+                    SetDestination();
+                    DisplayLineEdit(false);
+                    break;
+                default: break;
+            }
+        }
+        /*if (ev->type() == QEvent::MouseButtonRelease)
         {
             TRACE_DEBUG("lineEdit widget clicked !");
             if (isKeyboard && !infoPanel && !keyboard.isVisible())
                 ShowKeyboard();
-        }
+        }*/
     }
-
+    mutex.unlock();
     return false;
 }
 
-void MainApp::SetDestination(double latitude, double longitude)
+void MainApp::SetDestination()
 {
+    mutex.lock();
     /* params are only used if no item is selected in pResultList. */
-    
-    QList<QTreeWidgetItem *> SelectedItems = pResultList->selectedItems();
+
+    QList<QTreeWidgetItem *> SelectedItems = resultList.selectedItems();
     if (SelectedItems.size() <= 0)
     {
         TRACE_INFO("no item is selected");
+        mutex.unlock();
+        return;
     }
-    else
-    {
-        /* select the first selected item : */
-        int index = pResultList->indexOfTopLevelItem(*SelectedItems.begin());
-        TRACE_DEBUG("index is: %d", index);
 
-        /* retrieve the coordinates of this item : */
-        latitude = Businesses[index].Latitude;
-        longitude = Businesses[index].Longitude;
-    }
+    /* select the first selected item : */
+    int index = resultList.indexOfTopLevelItem(*SelectedItems.begin());
+    TRACE_DEBUG("index is: %d", index);
+
+    /* retrieve the coordinates of this item : */
+    double latitude = Businesses[index].Latitude;
+    double longitude = Businesses[index].Longitude;
 
     /* check if a route already exists, if not create it : */
     uint32_t myRoute;
@@ -553,61 +569,80 @@ void MainApp::SetDestination(double latitude, double longitude)
     currentSearchText = tr("");
     currentIndex = 0;
     Businesses.clear();
+
+    mutex.unlock();
 }
 
-void MainApp::DisplayInformation()
+void MainApp::DisplayInformation(bool display)
 {
-    QList<QTreeWidgetItem *> SelectedItems = pResultList->selectedItems();
-    if (SelectedItems.size() <= 0)
+    if (display)
     {
-        TRACE_ERROR("no item is selected");
-        return;
+        //DisplayResultList(false);
+        QList<QTreeWidgetItem *> SelectedItems = resultList.selectedItems();
+        if (SelectedItems.size() <= 0)
+        {
+            TRACE_ERROR("no item is selected");
+            return;
+        }
+
+        /* select the first selected item : */
+        currentIndex = resultList.indexOfTopLevelItem(*SelectedItems.begin());
+
+        /* Resize window: */
+        DisplayResultList(false);
+
+        /* Display info for the selected item: */
+        QRect rect( searchBtn.width()+SPACER, searchBtn.height()+SPACER,
+                    INFO_WIDTH, INFO_HEIGHT);
+        pInfoPanel = new InfoPanel(&window, Businesses[currentIndex], rect);
+
+        window.setGeometry(QRect(   window.pos().x(), window.pos().y(),
+                                    WIDGET_WIDTH,
+                                    searchBtn.height()+SPACER+INFO_HEIGHT));
+
+        connect(pInfoPanel->getGoButton(),      SIGNAL(clicked(bool)), this, SLOT(goClicked()));
+        connect(pInfoPanel->getCancelButton(),  SIGNAL(clicked(bool)), this, SLOT(cancelClicked()));
+    }
+    else
+    {
+        if (pInfoPanel)
+        {
+            delete pInfoPanel;
+            pInfoPanel = NULL;
+        }
+        lineEdit.setFocus();
+        window.setGeometry(QRect(window.pos().x(), window.pos().y(), WIDGET_WIDTH, searchBtn.height()));
     }
 
-    /* select the first selected item : */
-    currentIndex = pResultList->indexOfTopLevelItem(*SelectedItems.begin());
-
-    /* Resize window: */
-    Expand(false, false);
-
-    /* Display info for the selected item: */
-    infoPanel = new InfoPanel(this, &layout, Businesses[currentIndex]);
-    TRACE_INFO("infoPanel = %p", infoPanel);
-
-    layout.addWidget(infoPanel);
-    layout.setAlignment(infoPanel, Qt::AlignTop | Qt::AlignHCenter);
-    infoPanel->setFocus();
-
-    window.adjustSize();
-
-    if (getenv("AGL_NAVI"))
+    /*if (getenv("AGL_NAVI"))
     {
         QTimer timer(this);
         timer.singleShot(100, this, SLOT(UpdateAglSurfaces()));
-    }
+    }*/
 
-    int res = infoPanel->exec(); // wait for user to click
+    //int res = msgBox.exec(); // wait for user to click
 
-    mutex.lock();
+    /*mutex.lock();
 
     if (res == QDialog::Accepted)
     {
         double latitude, longitude;
-        if (infoPanel->getCoords(latitude, longitude))
+        if (pInfoPanel->getCoords(latitude, longitude))
         {
+            TRACE_ERROR("warning: make sure that no index is used"); // TODO: remove this
             SetDestination(latitude, longitude);
         }
     }
 
-    layout.removeWidget(infoPanel);
-    delete infoPanel;
-    infoPanel = NULL;
-
+    //vLayout.removeWidget(infoPanel);
+    delete pInfoPanel;
+    pInfoPanel = NULL;
 
     if (res == QDialog::Rejected)
     {
-        Expand(false, false);
-        DisplayResultList(Businesses, currentIndex);
+        //Expand(false, false);
+        DisplayResultList(true);
+        FillResultList(Businesses, currentIndex);
     }
 
     mutex.unlock();
@@ -615,7 +650,7 @@ void MainApp::DisplayInformation()
     if (res == QDialog::Accepted)
     {
         lineEdit.setText(tr(""));
-    }
+    }*/
 }
 
 void MainApp::networkReplySearch(QNetworkReply* reply)
@@ -648,19 +683,20 @@ void MainApp::networkReplySearch(QNetworkReply* reply)
     currentIndex = 0;
     Businesses.clear();
     ParseJsonBusinessList(buf, Businesses);
-    DisplayResultList(Businesses);
+    DisplayResultList(true);
+    FillResultList(Businesses);
     
     mutex.unlock();
 }
 
-int MainApp::DisplayResultList(vector<Business> & list, int focusIndex)
+int MainApp::FillResultList(vector<Business> & list, int focusIndex)
 {
     int nbElem = 0;
-    const QPalette &pal = lineEdit.palette();
-    QColor color = pal.color(QPalette::Disabled, QPalette::WindowText);
 
-    pResultList->setUpdatesEnabled(false);
-    pResultList->clear();
+    mutex.lock();
+
+    resultList.setUpdatesEnabled(false);
+    resultList.clear();
 
     /* filling the dropdown menu: */
     for (vector<Business>::iterator it = list.begin(); it != list.end(); it++)
@@ -672,21 +708,26 @@ int MainApp::DisplayResultList(vector<Business> & list, int focusIndex)
             continue;
         }
 
-        QTreeWidgetItem * item = new QTreeWidgetItem(pResultList);
-        item->setText(0, (*it).Name);
-        item->setText(1, (*it).Address + QString(", ") + (*it).City);
-        item->setTextAlignment(1, Qt::AlignRight);
-        item->setTextColor(1, color);
+        QTreeWidgetItem * item = new QTreeWidgetItem(&resultList);
+        ClickableLabel *label = new ClickableLabel("<b>"+(*it).Name+"</b><br>"+(*it).Address+", "+(*it).City+", "+
+            (*it).State+" "+(*it).ZipCode+", "+(*it).Country);
+        label->setTextFormat(Qt::RichText);
+        label->setIndent(MARGINS);
+        //resultList.addTopLevelItem(item);
+        item->setSizeHint(0, QSize(TEXT_INPUT_WIDTH, RESULT_ITEM_HEIGHT));
+        resultList.setItemWidget(item, 0, label);
+        connect(label, SIGNAL(clicked()), this, SLOT(itemClicked()));
+
         if (nbElem == focusIndex)
         {
-            pResultList->setCurrentItem(item); 
+            resultList.setCurrentItem(item); 
         }
         nbElem++;
     }
 
-    Expand(true);
-    pResultList->setUpdatesEnabled(true);
+    resultList.setUpdatesEnabled(true);
 
+    mutex.unlock();
     return nbElem;
 }
 
@@ -760,7 +801,7 @@ int MainApp::AuthenticatePOI(const QString & CredentialsFile)
     if (strlen(buf) > 0 && buf[strlen(buf)-1] == '\n')
         buf[strlen(buf)-1] = '\0';
     AppId = QString(buf);
-    AppId.replace(0, 6, QString(""));
+    AppId.replace(0, 6, tr(""));
     
     if (!fgets(buf, 512, filep))
     {
@@ -771,7 +812,7 @@ int MainApp::AuthenticatePOI(const QString & CredentialsFile)
     if (strlen(buf) > 0 && buf[strlen(buf)-1] == '\n')
         buf[strlen(buf)-1] = '\0';
     AppSecret = QString(buf);
-    AppSecret.replace(0, 10, QString(""));
+    AppSecret.replace(0, 10, tr(""));
 
     fclose(filep);
 
@@ -848,18 +889,28 @@ int MainApp::AuthenticatePOI(const QString & CredentialsFile)
 
 int MainApp::StartMonitoringUserInput()
 {
+    connect(&searchBtn, SIGNAL(clicked(bool)), this, SLOT(searchBtnClicked()));
     connect(&lineEdit, SIGNAL(textChanged(const QString &)), this, SLOT(textChanged(const QString &)));
-    if (isKeyboard)
+    /*if (isKeyboard)
     {
         connect(&keyboard, SIGNAL(keyClicked(const QString &)), this, SLOT(textAdded(const QString &)));
         connect(&keyboard, SIGNAL(specialKeyClicked(int)), this, SLOT(keyPressed(int)));
-    }
+    }*/
     connect(&networkManager, SIGNAL(finished(QNetworkReply*)), this, SLOT(networkReplySearch(QNetworkReply*)));
-    connect(pResultList, SIGNAL(itemClicked(QTreeWidgetItem *, int)), this, SLOT(itemClicked(QTreeWidgetItem *, int)));
     return 1;
 }
 
-/*void MainApp::goClicked()
+void MainApp::goClicked()
 {
-    TRACE_INFO("go clicked !");
-}*/
+    TRACE_DEBUG("Go clicked !");
+    SetDestination();
+    DisplayLineEdit(false);
+}
+
+void MainApp::cancelClicked()
+{
+    TRACE_DEBUG("Cancel clicked !");
+    DisplayInformation(false);
+    DisplayResultList(true);
+    FillResultList(Businesses, currentIndex);
+}
