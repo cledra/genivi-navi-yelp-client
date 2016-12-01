@@ -2,6 +2,50 @@
   <qresource>
     <file>images/stars_map_www.png</file>
     <file>images/loupe-90.png</file>
+    <file>images/0.png</file>
+    <file>images/1.png</file>
+    <file>images/2.png</file>
+    <file>images/3.png</file>
+    <file>images/4.png</file>
+    <file>images/5.png</file>
+    <file>images/6.png</file>
+    <file>images/7.png</file>
+    <file>images/8.png</file>
+    <file>images/9.png</file>
+    <file>images/A.png</file>
+    <file>images/B.png</file>
+    <file>images/C.png</file>
+    <file>images/D.png</file>
+    <file>images/E.png</file>
+    <file>images/F.png</file>
+    <file>images/G.png</file>
+    <file>images/H.png</file>
+    <file>images/I.png</file>
+    <file>images/J.png</file>
+    <file>images/K.png</file>
+    <file>images/L.png</file>
+    <file>images/M.png</file>
+    <file>images/N.png</file>
+    <file>images/O.png</file>
+    <file>images/P.png</file>
+    <file>images/Q.png</file>
+    <file>images/R.png</file>
+    <file>images/S.png</file>
+    <file>images/T.png</file>
+    <file>images/U.png</file>
+    <file>images/V.png</file>
+    <file>images/W.png</file>
+    <file>images/X.png</file>
+    <file>images/Y.png</file>
+    <file>images/Z.png</file>
+    <file>images/apostrophe.png</file>
+    <file>images/back.png</file>
+    <file>images/et.png</file>
+    <file>images/exclam.png</file>
+    <file>images/minus.png</file>
+    <file>images/slash.png</file>
+    <file>images/space.png</file>
+    <file>images/background.png</file>
     <file>fonts/DroidSansJapanese.ttf</file>
   </qresource>
 </RCC>

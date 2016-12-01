@@ -15,14 +15,14 @@ static void usage(void)
     cout << "                        AppId=dummy" << endl;
     cout << "                        AppSecret=dummy-secret" << endl;
     cout << "  -i, --information-screen                        display info screen about selection" << endl;
-    //cout << "  -k, --keyboard                                  display a virtual keyboard" << endl;
+    cout << "  -k, --keyboard                                  display a virtual keyboard" << endl;
     cout << "  -h, --help                                      this help message" << endl;
 }
 
 static struct option long_options[] = {
     {"credentials",             required_argument,  0,  'c' },
     {"information-screen",      no_argument,        0,  'i' },
-    //{"keyboard",                no_argument,        0,  'k' },
+    {"keyboard",                no_argument,        0,  'k' },
     {"help",                    no_argument,        0,  'h' },
     {0,                         0,                  0,  '\0'}
 };
@@ -45,9 +45,9 @@ int main(int argc, char *argv[])
             case 'i':
                 mainapp.setInfoScreen(true);
                 break;
-            /*case 'k':
+            case 'k':
                 mainapp.setKeyboard(true);
-                break;*/
+                break;
             case 'h':
                 usage();
                 return 0;

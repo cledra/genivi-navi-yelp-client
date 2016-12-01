@@ -1,193 +1,147 @@
 /**
-  Source : https://www.kdab.com/qt-input-method-virtual-keyboard/
+  Source : inspired by https://www.kdab.com/qt-input-method-virtual-keyboard/
   */
 
 #include "Keyboard.h"
 
 #include <QWidget>
-#include <QGridLayout>
+#include <QRect>
+#include <QString>
 #include <QSignalMapper>
 #include <QPushButton>
+#include <QImageReader>
 
-#define NEXT_ROW_MARKER 0
-#define NEXT_COL_MARKER 1
-#define KEY_WIDTH 60
+#define NEXT_ROW_MARKER '\0'
 
-struct KeyboardLayoutEntry{
+#define SIZE_FACTOR 1
+
+#define OFFSET_H        ( 78 * SIZE_FACTOR )
+#define OFFSET_COLS     ( 93 * SIZE_FACTOR )
+#define KEY_WIDTH       ( 78 * SIZE_FACTOR )
+#define KEY_HEIGHT      ( 94 * SIZE_FACTOR )
+#define MARGIN_H        ( 12 * SIZE_FACTOR )
+#define MARGIN_V        ( 18 * SIZE_FACTOR )
+#define SPACE_BAR_WIDTH ( 502 * SIZE_FACTOR )
+
+struct KeyboardLayoutEntry
+{
     int key;
-    const char *lowerlabel;
-    const char *upperlabel;
+    const char *image;
 };
 
-/*KeyboardLayoutEntry keyboardLayout[] = {
-    { Qt::Key_1, "1", "1" },
-    { Qt::Key_2, "2", "2" },
-    { Qt::Key_3, "3", "3" },
-    { Qt::Key_4, "4", "4" },
-    { Qt::Key_5, "5", "5" },
-    { Qt::Key_6, "6", "6" },
-    { Qt::Key_7, "7", "7" },
-    { Qt::Key_8, "8", "8" },
-    { Qt::Key_9, "9", "9" },
-    { Qt::Key_0, "0", "0" },
-    { Qt::Key_Backspace, "<-", "<-" },
-    { NEXT_ROW_MARKER, 0, 0 },
-    { Qt::Key_Q, "q", "Q" },
-    { Qt::Key_W, "w", "W" },
-    { Qt::Key_E, "e", "E" },
-    { Qt::Key_R, "r", "R" },
-    { Qt::Key_T, "t", "T" },
-    { Qt::Key_Z, "y", "Y" },
-    { Qt::Key_U, "u", "U" },
-    { Qt::Key_I, "i", "I" },
-    { Qt::Key_O, "o", "O" },
-    { Qt::Key_P, "p", "P" },
-    { NEXT_ROW_MARKER, 0, 0 },
-    { NEXT_COL_MARKER, 0, 0 },
-    { Qt::Key_A, "a", "A" },
-    { Qt::Key_S, "s", "S" },
-    { Qt::Key_D, "d", "D" },
-    { Qt::Key_F, "f", "F" },
-    { Qt::Key_G, "g", "G" },
-    { Qt::Key_H, "h", "H" },
-    { Qt::Key_J, "j", "J" },
-    { Qt::Key_K, "k", "K" },
-    { Qt::Key_L, "l", "L" },
-    { NEXT_ROW_MARKER, 0, 0 },
-    { NEXT_COL_MARKER, 0, 0 },
-    { NEXT_COL_MARKER, 0, 0 },
-    { Qt::Key_Y, "z", "Z" },
-    { Qt::Key_X, "x", "X" },
-    { Qt::Key_C, "c", "C" },
-    { Qt::Key_V, "v", "V" },
-    { Qt::Key_B, "b", "B" },
-    { Qt::Key_N, "n", "N" },
-    { Qt::Key_M, "m", "M" },
-    //{ Qt::Key_Enter, "Enter", "Enter" }
-};*/
-
 KeyboardLayoutEntry keyboardLayout[] = {
-    { Qt::Key_1, "1", "1" },
-    { Qt::Key_2, "2", "2" },
-    { Qt::Key_3, "3", "3" },
-    { Qt::Key_4, "4", "4" },
-    { Qt::Key_5, "5", "5" },
-    { Qt::Key_6, "6", "6" },
-    { Qt::Key_7, "7", "7" },
-    { Qt::Key_8, "8", "8" },
-    { Qt::Key_9, "9", "9" },
-    { Qt::Key_0, "0", "0" },
-    { Qt::Key_Backspace, "<-", "<-" },
-    { NEXT_ROW_MARKER, 0, 0 },
-    { Qt::Key_Q, "q", "Q" },
-    { Qt::Key_W, "w", "W" },
-    { Qt::Key_E, "e", "E" },
-    { Qt::Key_R, "r", "R" },
-    { Qt::Key_T, "t", "T" },
-    { Qt::Key_Z, "y", "Y" },
-    { Qt::Key_U, "u", "U" },
-    { Qt::Key_I, "i", "I" },
-    { Qt::Key_O, "o", "O" },
-    { Qt::Key_P, "p", "P" },
-    { NEXT_ROW_MARKER, 0, 0 },
-    { Qt::Key_A, "a", "A" },
-    { Qt::Key_S, "s", "S" },
-    { Qt::Key_D, "d", "D" },
-    { Qt::Key_F, "f", "F" },
-    { Qt::Key_G, "g", "G" },
-    { Qt::Key_H, "h", "H" },
-    { Qt::Key_J, "j", "J" },
-    { Qt::Key_K, "k", "K" },
-    { Qt::Key_L, "l", "L" },
-    { NEXT_ROW_MARKER, 0, 0 },
-    { Qt::Key_Y, "z", "Z" },
-    { Qt::Key_X, "x", "X" },
-    { Qt::Key_C, "c", "C" },
-    { Qt::Key_V, "v", "V" },
-    { Qt::Key_B, "b", "B" },
-    { Qt::Key_N, "n", "N" },
-    { Qt::Key_M, "m", "M" },
-    { Qt::Key_Comma, ",", "," },
-    { NEXT_ROW_MARKER, 0, 0 },
-    { Qt::Key_Apostrophe, "'", "'" },
-    { Qt::Key_Minus, "-", "-" },
-    { Qt::Key_Space, " ", "" },
-    { Qt::Key_Slash, "/", "/" },
-    { Qt::Key_Exclam, "!", "!" }
+    { '1' , "1.png" },
+    { '2' , "2.png" },
+    { '3' , "3.png" },
+    { '4' , "4.png" },
+    { '5' , "5.png" },
+    { '6' , "6.png" },
+    { '7' , "7.png" },
+    { '8' , "8.png" },
+    { '9' , "9.png" },
+    { '0' , "0.png" },
+    { NEXT_ROW_MARKER, NULL },
+    { 'q' , "Q.png" },
+    { 'w' , "W.png" },
+    { 'e' , "E.png" },
+    { 'r' , "R.png" },
+    { 't' , "T.png" },
+    { 'y' , "Y.png" },
+    { 'u' , "U.png" },
+    { 'i' , "I.png" },
+    { 'o' , "O.png" },
+    { 'p' , "P.png" },
+    { NEXT_ROW_MARKER, NULL },
+    { 'a' , "A.png" },
+    { 's' , "S.png" },
+    { 'd' , "D.png" },
+    { 'f' , "F.png" },
+    { 'g' , "G.png" },
+    { 'h' , "H.png" },
+    { 'j' , "J.png" },
+    { 'k' , "K.png" },
+    { 'l' , "L.png" },
+    { NEXT_ROW_MARKER, NULL },
+    { 'z' , "Z.png" },
+    { 'x' , "X.png" },
+    { 'c' , "C.png" },
+    { 'v' , "V.png" },
+    { 'b' , "B.png" },
+    { 'n' , "N.png" },
+    { 'm' , "M.png" },
+    { '!' , "exclam.png" },
+    { '\b',"back.png" },
+    { NEXT_ROW_MARKER, NULL },
+    { '\'',"apostrophe.png" },
+    { '&' , "et.png" },
+    { ' ' , "space.png" },
+    { '-' , "minus.png" },
+    { '/' , "slash.png" }
 };
 
 const static int layoutSize = (sizeof(keyboardLayout) /
                                sizeof(KeyboardLayoutEntry));
 
-Keyboard::Keyboard(QWidget *parent)
-    : QWidget(parent)
+Keyboard::Keyboard(QRect r, QWidget *parent):QWidget(parent),background(parent),
+    rect(QRect(r.x() + (r.width()-(r.width()*SIZE_FACTOR))/2, r.y(), r.width()*SIZE_FACTOR, r.height()*SIZE_FACTOR))
 {
     int nbRowMarkers = 1;
     for (int i = 0; i < layoutSize; ++i)
         if (keyboardLayout[i].key == NEXT_ROW_MARKER)
             nbRowMarkers++;
-    
-    QVBoxLayout *vboxLayout = new QVBoxLayout(this);
-    QGridLayout *rows[nbRowMarkers];
-    for (int i=0; i<nbRowMarkers; i++)
-    {
-        rows[i] = new QGridLayout(NULL);
-        vboxLayout->insertLayout(i, rows[i]);
-        rows[i]->setContentsMargins(KEY_WIDTH*i/2, 0, KEY_WIDTH*i/2, 0);
-    }
 
     QSignalMapper *mapper = new QSignalMapper(this);
     connect(mapper, SIGNAL(mapped(int)), SLOT(buttonClicked(int)));
 
     int row = 0;
-    int column = 0;
+    int offset_h = KEY_WIDTH;
+    int offset_v = (rect.height() - (KEY_HEIGHT*nbRowMarkers + MARGIN_V*(nbRowMarkers-1))) / 2;
+
+    background.setGeometry(rect);
+    QImageReader reader(QString(":/images/background.png"));
+    background.setPixmap(QPixmap::fromImage(reader.read()).scaled(rect.width(), rect.height(), Qt::IgnoreAspectRatio));
+    
+    background.setVisible(true);
 
     for (int i = 0; i < layoutSize; ++i)
     {
+        int key_width = KEY_WIDTH;
         if (keyboardLayout[i].key == NEXT_ROW_MARKER)
         {
             row++;
-            column = 0;
+            offset_h = OFFSET_H;
+            if (row == 2)
+                offset_h += (KEY_WIDTH + MARGIN_H)/2;
+            else if (row == 3)
+                offset_h += (KEY_WIDTH + MARGIN_H);
+            offset_v += (KEY_HEIGHT+MARGIN_V);
             continue;
         }
+        else if (keyboardLayout[i].key ==  ' ')
+        {
+            key_width = SPACE_BAR_WIDTH;
+        }
 
-        QPushButton *button = new QPushButton;
-        QFont font = button->font();
-        font.setPointSize(19);
-        button->setFont(font);
-        button->setFixedHeight(33);
-        if (keyboardLayout[i].key == Qt::Key_Backspace)
-            button->setFixedWidth(KEY_WIDTH*1.5);
-        else if (keyboardLayout[i].key == Qt::Key_Space)
-            button->setFixedWidth(220);
-        else
-            button->setFixedWidth(KEY_WIDTH);
-
-        button->setText(QString::fromLatin1(keyboardLayout[i].upperlabel));
+        QPushButton *button = new QPushButton(QIcon(tr(":/images/")+QString(keyboardLayout[i].image)), tr(""), parent);
+        button->setMinimumSize(QSize(key_width, KEY_HEIGHT));
+        button->setMaximumSize(QSize(key_width, KEY_HEIGHT));
+        button->setIconSize(button->size());
+        button->setGeometry(QRect(  rect.x() + offset_h,
+                                    rect.y() + offset_v,
+                                    button->width(), button->height()));
+        button->setVisible(true);
 
         mapper->setMapping(button, keyboardLayout[i].key);
         connect(button, SIGNAL(clicked()), mapper, SLOT(map()));
 
-        rows[row]->addWidget(button, 0, column);
-        column++;
+        offset_h += (key_width+MARGIN_H);
     }
-}
-
-static QString keyToCharacter(int key)
-{
-    for (int i = 0; i < layoutSize; ++i)
-    {
-        if (keyboardLayout[i].key == key)
-            return QString::fromLatin1(keyboardLayout[i].lowerlabel);
-    }
-
-    return QString();
 }
 
 void Keyboard::buttonClicked(int key)
 {
-    if (key == Qt::Key_Backspace)
+    if (key == '\b') /* backspace */
         emit specialKeyClicked(key);
     else
-        emit keyClicked(keyToCharacter(key));
+        emit keyClicked(QString(key));
 }

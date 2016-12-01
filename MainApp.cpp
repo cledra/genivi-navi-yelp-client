@@ -15,7 +15,7 @@
 #include "Business.h"
 #include "InfoPanel.h"
 #include "ClickableLabel.h"
-//#include "Keyboard.h"
+#include "Keyboard.h"
 #include "libgeniviwrapper/GeniviWrapper.h"
 #include "libgeniviwrapper/include/genivi-navicore-constants.h"
 #include "traces.h"
@@ -42,20 +42,15 @@
 using namespace std;
 
 MainApp::MainApp():
-    navicoreSession(0),mutex(QMutex::Recursive),wrapper(),
-    window(Q_NULLPTR, Qt::FramelessWindowHint),
-    token(""),networkManager(this),pSearchReply(NULL),
-    searchBtn(QIcon(tr(":/images/loupe-90.png")), tr(""), &window),
-    isInfoScreen(false),
-    isInputDisplayed(false),
-    lineEdit(&window),resultList(&window),pInfoPanel(NULL),
-    currentLatitude(0.0),currentLongitude(0.0),currentSearchText(""),
-    currentIndex(0)
+    wrapper(),window(Q_NULLPTR, Qt::FramelessWindowHint),
+    networkManager(this),searchBtn(QIcon(tr(":/images/loupe-90.png")), tr(""), &window),
+    lineEdit(&window),resultList(&window),mutex(QMutex::Recursive),token(""),currentSearchText(""),
+    pSearchReply(NULL),pInfoPanel(NULL),pKeyboard(NULL),currentLatitude(0.0),currentLongitude(0.0),
+    navicoreSession(0),currentIndex(0),fontId(-1),isInfoScreen(false),
+    isInputDisplayed(false), isKeyboard(false)
 {
     window.setAttribute(Qt::WA_TranslucentBackground);
     window.setStyleSheet("border: none;");
-
-    //keyboard.hide();
 
     searchBtn.setStyleSheet("border: none;");
     searchBtn.setMinimumSize(QSize(SEARCH_BTN_SIZE, SEARCH_BTN_SIZE));
@@ -95,7 +90,8 @@ MainApp::MainApp():
     else
     {
         QByteArray fontData = fontFile.readAll();
-        if (QFontDatabase::addApplicationFontFromData(fontData) == -1)
+        fontId = QFontDatabase::addApplicationFontFromData(fontData);
+        if (fontId < 0)
         {
             TRACE_ERROR("QFontDatabase::addApplicationFontFromData failed");
         }
@@ -108,7 +104,11 @@ MainApp::MainApp():
 MainApp::~MainApp()
 {
     mutex.lock();
+    if (fontId >= 0)
+        QFontDatabase::removeApplicationFont(fontId);
     delete pSearchReply;
+    delete pInfoPanel;
+    delete pKeyboard;
     mutex.unlock();
 }
 
@@ -124,20 +124,51 @@ void MainApp::DisplayLineEdit(bool display)
     mutex.lock();
     if (display)
     {
-        lineEdit.setGeometry(QRect(searchBtn.width()+SPACER, 0, lineEdit.width(), lineEdit.height()));
-        lineEdit.setVisible(true);
-        window.setGeometry(QRect(window.pos().x(), window.pos().y(), WIDGET_WIDTH, searchBtn.height()));
+        if (isKeyboard)
+        {
+            lineEdit.setGeometry(QRect(searchBtn.width()+SPACER, 0, lineEdit.width(), lineEdit.height()));
+            lineEdit.setVisible(true);
+            window.setGeometry(QRect(window.pos().x(), window.pos().y(), 1080, 1408));
+
+            if (!pKeyboard)
+            {
+                TRACE_DEBUG("new keyboard");
+                pKeyboard = new Keyboard(QRect(0, 688, 1080, 720), &window);
+                connect(pKeyboard, SIGNAL(keyClicked(const QString &)), this, SLOT(textAdded(const QString &)));
+                connect(pKeyboard, SIGNAL(specialKeyClicked(int)), this, SLOT(keyPressed(int)));
+            }
+        }
+        else
+        {
+            lineEdit.setGeometry(QRect(searchBtn.width()+SPACER, 0, lineEdit.width(), lineEdit.height()));
+            lineEdit.setVisible(true);
+            window.setGeometry(QRect(window.pos().x(), window.pos().y(), WIDGET_WIDTH, searchBtn.height()));
+        }
+
         lineEdit.setFocus();
     }
     else
     {
-        DisplayResultList(false);
-        DisplayInformation(false);
+        if (isKeyboard && pKeyboard)
+        {
+            TRACE_DEBUG("delete keyboard");
+            delete pKeyboard;
+            pKeyboard = NULL;
+        }
+        DisplayResultList(false, false);
+        DisplayInformation(false, false);
         lineEdit.setText(tr(""));
         lineEdit.setVisible(false);
         window.setGeometry(QRect(window.pos().x(), window.pos().y(), searchBtn.width(), searchBtn.height()));
     }
     isInputDisplayed = display;
+
+    if (getenv("AGL_NAVI"))
+    {
+        QTimer timer(this);
+        timer.singleShot(100, this, SLOT(UpdateAglSurfaces()));
+    }
+    
     mutex.unlock();
 }
 
@@ -156,16 +187,19 @@ void MainApp::UpdateAglSurfaces()
     system(cmd);
 }
 
-void MainApp::DisplayResultList(bool display)
+void MainApp::DisplayResultList(bool display, bool RefreshDisplay)
 {
     mutex.lock();
     if (display)
     {
         resultList.setGeometry(QRect(   searchBtn.width()+SPACER, searchBtn.height()+SPACER,
                                         RESULT_LIST_WIDTH, RESULT_LIST_HEIGHT));
-        window.setGeometry(QRect(   window.pos().x(), window.pos().y(),
-                                    WIDGET_WIDTH,
-                                    searchBtn.height()+SPACER+resultList.height()));
+        if (isKeyboard)
+            window.setGeometry(QRect(window.pos().x(), window.pos().y(), 1080, 1408));
+        else
+            window.setGeometry(QRect(   window.pos().x(), window.pos().y(),
+                                        WIDGET_WIDTH,
+                                        searchBtn.height()+SPACER+resultList.height()));
         resultList.setVisible(true);
         resultList.setFocus();
     }
@@ -173,8 +207,18 @@ void MainApp::DisplayResultList(bool display)
     {
         resultList.setVisible(false);
         lineEdit.setFocus();
-        window.setGeometry(QRect(window.pos().x(), window.pos().y(), WIDGET_WIDTH, searchBtn.height()));
+        if (isKeyboard)
+            window.setGeometry(QRect(window.pos().x(), window.pos().y(), 1080, 1408));
+        else
+            window.setGeometry(QRect(window.pos().x(), window.pos().y(), WIDGET_WIDTH, searchBtn.height()));
     }
+
+    if (RefreshDisplay && getenv("AGL_NAVI"))
+    {
+        QTimer timer(this);
+        timer.singleShot(100, this, SLOT(UpdateAglSurfaces()));
+    }
+    
     mutex.unlock();
 }
 
@@ -233,7 +277,6 @@ void MainApp::textChanged(const QString & text)
     QNetworkRequest req(myUrl);
     req.setRawHeader("Authorization", (tr("bearer ") + token).toLocal8Bit());
     pSearchReply = networkManager.get(req);
-    TRACE_DEBUG("after post, reply is %p", pSearchReply);
     
     mutex.unlock();
 }
@@ -248,13 +291,11 @@ void MainApp::textAdded(const QString & text)
 void MainApp::keyPressed(int key)
 {
     mutex.lock();
-    if (key == Qt::Key_Backspace)
+    if (key == '\b') /* backspace */
     {
         int len = lineEdit.text().length();
         if (len > 0)
             lineEdit.setText(lineEdit.text().remove(len-1, 1));
-        /*else if (isKeyboard)
-            ShowKeyboard(false);*/
     }
     mutex.unlock();
 }
@@ -421,29 +462,7 @@ bool MainApp::eventFilter(QObject *obj, QEvent *ev)
     {
         //TRACE_DEBUG("ev->type() = %d", (int)ev->type());
 
-        /*if (lineEdit.hasSelectedText())
-        {
-            // I never want the text to be selected, but sometimes it is (why ??)
-            //lineEdit.deselect();
-            TRACE_WARN(" ");
-        }*/
-
-        /*if (ev->type() == QEvent::MouseButtonRelease)
-        {
-            if (isInfoScreen)
-            {
-                TRACE_WARN(" ");
-                DisplayResultList(false);
-                DisplayInformation(true);
-            }
-            else
-            {
-                TRACE_WARN(" ");
-                SetDestination();
-                DisplayLineEdit(false);
-            }
-        }
-        else*/ if (ev->type() == QEvent::KeyPress)
+        if (ev->type() == QEvent::KeyPress)
         {
             bool consumed = false;
             int key = static_cast<QKeyEvent*>(ev)->key();
@@ -455,7 +474,6 @@ bool MainApp::eventFilter(QObject *obj, QEvent *ev)
                     if (isInfoScreen)
                     {
                         DisplayInformation(true);
-                        break;
                     }
                     else
                     {
@@ -463,11 +481,13 @@ bool MainApp::eventFilter(QObject *obj, QEvent *ev)
                         DisplayLineEdit(false);
                     }
                     consumed = true;
+                    break;
 
                 case Qt::Key_Escape:
                     TRACE_DEBUG("escape");
                     DisplayResultList(false);
                     consumed = true;
+                    break;
 
                 case Qt::Key_Up:
                 case Qt::Key_Down:
@@ -508,12 +528,6 @@ bool MainApp::eventFilter(QObject *obj, QEvent *ev)
                 default: break;
             }
         }
-        /*if (ev->type() == QEvent::MouseButtonRelease)
-        {
-            TRACE_DEBUG("lineEdit widget clicked !");
-            if (isKeyboard && !infoPanel && !keyboard.isVisible())
-                ShowKeyboard();
-        }*/
     }
     mutex.unlock();
     return false;
@@ -573,11 +587,10 @@ void MainApp::SetDestination()
     mutex.unlock();
 }
 
-void MainApp::DisplayInformation(bool display)
+void MainApp::DisplayInformation(bool display, bool RefreshDisplay)
 {
     if (display)
     {
-        //DisplayResultList(false);
         QList<QTreeWidgetItem *> SelectedItems = resultList.selectedItems();
         if (SelectedItems.size() <= 0)
         {
@@ -614,43 +627,11 @@ void MainApp::DisplayInformation(bool display)
         window.setGeometry(QRect(window.pos().x(), window.pos().y(), WIDGET_WIDTH, searchBtn.height()));
     }
 
-    /*if (getenv("AGL_NAVI"))
+    if (RefreshDisplay && getenv("AGL_NAVI"))
     {
         QTimer timer(this);
         timer.singleShot(100, this, SLOT(UpdateAglSurfaces()));
-    }*/
-
-    //int res = msgBox.exec(); // wait for user to click
-
-    /*mutex.lock();
-
-    if (res == QDialog::Accepted)
-    {
-        double latitude, longitude;
-        if (pInfoPanel->getCoords(latitude, longitude))
-        {
-            TRACE_ERROR("warning: make sure that no index is used"); // TODO: remove this
-            SetDestination(latitude, longitude);
-        }
     }
-
-    //vLayout.removeWidget(infoPanel);
-    delete pInfoPanel;
-    pInfoPanel = NULL;
-
-    if (res == QDialog::Rejected)
-    {
-        //Expand(false, false);
-        DisplayResultList(true);
-        FillResultList(Businesses, currentIndex);
-    }
-
-    mutex.unlock();
-
-    if (res == QDialog::Accepted)
-    {
-        lineEdit.setText(tr(""));
-    }*/
 }
 
 void MainApp::networkReplySearch(QNetworkReply* reply)
@@ -713,7 +694,6 @@ int MainApp::FillResultList(vector<Business> & list, int focusIndex)
             (*it).State+" "+(*it).ZipCode+", "+(*it).Country);
         label->setTextFormat(Qt::RichText);
         label->setIndent(MARGINS);
-        //resultList.addTopLevelItem(item);
         item->setSizeHint(0, QSize(TEXT_INPUT_WIDTH, RESULT_ITEM_HEIGHT));
         resultList.setItemWidget(item, 0, label);
         connect(label, SIGNAL(clicked()), this, SLOT(itemClicked()));
@@ -891,11 +871,6 @@ int MainApp::StartMonitoringUserInput()
 {
     connect(&searchBtn, SIGNAL(clicked(bool)), this, SLOT(searchBtnClicked()));
     connect(&lineEdit, SIGNAL(textChanged(const QString &)), this, SLOT(textChanged(const QString &)));
-    /*if (isKeyboard)
-    {
-        connect(&keyboard, SIGNAL(keyClicked(const QString &)), this, SLOT(textAdded(const QString &)));
-        connect(&keyboard, SIGNAL(specialKeyClicked(int)), this, SLOT(keyPressed(int)));
-    }*/
     connect(&networkManager, SIGNAL(finished(QNetworkReply*)), this, SLOT(networkReplySearch(QNetworkReply*)));
     return 1;
 }

@@ -11,7 +11,7 @@
 #include "libgeniviwrapper/GeniviWrapper.h"
 #include "Business.h"
 #include "InfoPanel.h"
-//#include "Keyboard.h"
+#include "Keyboard.h"
 
 class MainApp: public QMainWindow
 {
@@ -24,39 +24,38 @@ class MainApp: public QMainWindow
         int AuthenticatePOI(const QString & CredentialsFile);
         int StartMonitoringUserInput();
         void setInfoScreen(bool val) { isInfoScreen = val; }
-        //void setKeyboard(bool val)   { isKeyboard = val; }
+        void setKeyboard(bool val)   { isKeyboard = val; }
 
     private:
         void ParseJsonBusinessList(const char* buf, std::vector<Business> & Output);
         bool eventFilter(QObject *obj, QEvent *ev);
-        void ShowKeyboard(bool show = true);
-        void DisplayInformation(bool display);
         void SetDestination();
         bool IsCoordinatesConsistent(Business & business);
         void DisplayLineEdit(bool display = true);
-        void DisplayResultList(bool display);
+        void DisplayResultList(bool display, bool RefreshDisplay = true);
+        void DisplayInformation(bool display, bool RefreshDisplay = true);
         int FillResultList(std::vector<Business> & list, int focusIndex = 0);
 
-        uint32_t navicoreSession;
-        QMutex mutex; // to protect 'pSearchReply' from concurrent access
         GeniviWrapper wrapper;
         QWidget window;
-        QString token;
         QNetworkAccessManager networkManager;
-        QNetworkReply *pSearchReply;
         QPushButton searchBtn;
-        //Keyboard keyboard;
-        bool isInfoScreen;
-        bool isInputDisplayed;
-        //bool isKeyboard;
         QLineEdit lineEdit;
         QTreeWidget resultList;
-        InfoPanel* pInfoPanel;
-
+        QMutex mutex; // to protect 'pSearchReply' from concurrent access
+        QString token;
+        QString currentSearchText;
+        QNetworkReply *pSearchReply;
+        InfoPanel *pInfoPanel;
+        Keyboard *pKeyboard;
         double currentLatitude;
         double currentLongitude;
-        QString currentSearchText;
+        uint32_t navicoreSession;
         int currentIndex;
+        int fontId;
+        bool isInfoScreen;
+        bool isInputDisplayed;
+        bool isKeyboard;
         std::vector<Business> Businesses;
 
     private slots:
