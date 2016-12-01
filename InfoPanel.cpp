@@ -92,7 +92,7 @@ InfoPanel::InfoPanel(QWidget *parent, Business & business, QRect rect):
     const QImage image = reader.read();
     imgRatingLabel.Init(y, STARS_IMG_HEIGHT, QString(""));
     y += STARS_IMG_HEIGHT;
-    imgRatingLabel.setPixmap(QPixmap::fromImage(image).scaled(QSize(parent->width() / 4, STARS_IMG_HEIGHT), Qt::KeepAspectRatio));
+    imgRatingLabel.setPixmap(QPixmap::fromImage(image).scaled(QSize(rect.width() / 3, STARS_IMG_HEIGHT), Qt::KeepAspectRatio));
 
     /* Buttons: */
     btnsBackground.Init(y, 70, QString(""));
