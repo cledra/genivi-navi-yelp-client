@@ -26,6 +26,7 @@
 #define URL_SEARCH          "https://api.yelp.com/v3/businesses/search"
 
 #define BIG_BUFFER_SIZE     (1024*1024)
+#define LEFT_OFFSET         28
 #define FONT_SIZE_LINEDIT   20
 #define FONT_SIZE_LIST      14
 #define TEXT_INPUT_WIDTH    500
@@ -55,7 +56,7 @@ MainApp::MainApp():
     searchBtn.setStyleSheet("border: none;");
     searchBtn.setMinimumSize(QSize(SEARCH_BTN_SIZE, SEARCH_BTN_SIZE));
     searchBtn.setIconSize(searchBtn.size());
-    searchBtn.setGeometry(QRect(0, 0, searchBtn.width(), searchBtn.height()));
+    searchBtn.setGeometry(QRect(LEFT_OFFSET, 0, searchBtn.width(), searchBtn.height()));
 
     lineEdit.setStyleSheet("border: none;");
     lineEdit.setMinimumSize(QSize(TEXT_INPUT_WIDTH, SEARCH_BTN_SIZE));
@@ -97,7 +98,7 @@ MainApp::MainApp():
         }
     }
 
-    window.setGeometry(QRect(window.pos().x(), window.pos().y(), searchBtn.width(), searchBtn.height()));
+    window.setGeometry(QRect(window.pos().x(), window.pos().y(), LEFT_OFFSET + searchBtn.width(), searchBtn.height()));
     window.show();
 }
 
@@ -126,7 +127,7 @@ void MainApp::DisplayLineEdit(bool display)
     {
         if (isKeyboard)
         {
-            lineEdit.setGeometry(QRect(searchBtn.width()+SPACER, 0, lineEdit.width(), lineEdit.height()));
+            lineEdit.setGeometry(QRect(LEFT_OFFSET + searchBtn.width() + SPACER, 0, lineEdit.width(), lineEdit.height()));
             lineEdit.setVisible(true);
             window.setGeometry(QRect(window.pos().x(), window.pos().y(), 1080, 1408));
 
@@ -140,9 +141,9 @@ void MainApp::DisplayLineEdit(bool display)
         }
         else
         {
-            lineEdit.setGeometry(QRect(searchBtn.width()+SPACER, 0, lineEdit.width(), lineEdit.height()));
+            lineEdit.setGeometry(QRect(LEFT_OFFSET + searchBtn.width() + SPACER, 0, lineEdit.width(), lineEdit.height()));
             lineEdit.setVisible(true);
-            window.setGeometry(QRect(window.pos().x(), window.pos().y(), WIDGET_WIDTH, searchBtn.height()));
+            window.setGeometry(QRect(window.pos().x(), window.pos().y(), LEFT_OFFSET + WIDGET_WIDTH, searchBtn.height()));
         }
 
         lineEdit.setFocus();
@@ -159,7 +160,7 @@ void MainApp::DisplayLineEdit(bool display)
         DisplayInformation(false, false);
         lineEdit.setText(tr(""));
         lineEdit.setVisible(false);
-        window.setGeometry(QRect(window.pos().x(), window.pos().y(), searchBtn.width(), searchBtn.height()));
+        window.setGeometry(QRect(window.pos().x(), window.pos().y(), LEFT_OFFSET+searchBtn.width(), searchBtn.height()));
     }
     isInputDisplayed = display;
 
@@ -192,13 +193,13 @@ void MainApp::DisplayResultList(bool display, bool RefreshDisplay)
     mutex.lock();
     if (display)
     {
-        resultList.setGeometry(QRect(   searchBtn.width()+SPACER, searchBtn.height()+SPACER,
+        resultList.setGeometry(QRect(   LEFT_OFFSET+searchBtn.width()+SPACER, searchBtn.height()+SPACER,
                                         RESULT_LIST_WIDTH, RESULT_LIST_HEIGHT));
         if (isKeyboard)
             window.setGeometry(QRect(window.pos().x(), window.pos().y(), 1080, 1408));
         else
             window.setGeometry(QRect(   window.pos().x(), window.pos().y(),
-                                        WIDGET_WIDTH,
+                                        LEFT_OFFSET+WIDGET_WIDTH,
                                         searchBtn.height()+SPACER+resultList.height()));
         resultList.setVisible(true);
         resultList.setFocus();
@@ -210,7 +211,7 @@ void MainApp::DisplayResultList(bool display, bool RefreshDisplay)
         if (isKeyboard)
             window.setGeometry(QRect(window.pos().x(), window.pos().y(), 1080, 1408));
         else
-            window.setGeometry(QRect(window.pos().x(), window.pos().y(), WIDGET_WIDTH, searchBtn.height()));
+            window.setGeometry(QRect(window.pos().x(), window.pos().y(), LEFT_OFFSET+WIDGET_WIDTH, searchBtn.height()));
     }
 
     if (RefreshDisplay && getenv("AGL_NAVI"))
@@ -605,12 +606,12 @@ void MainApp::DisplayInformation(bool display, bool RefreshDisplay)
         DisplayResultList(false);
 
         /* Display info for the selected item: */
-        QRect rect( searchBtn.width()+SPACER, searchBtn.height()+SPACER,
+        QRect rect( LEFT_OFFSET+searchBtn.width()+SPACER, searchBtn.height()+SPACER,
                     INFO_WIDTH, INFO_HEIGHT);
         pInfoPanel = new InfoPanel(&window, Businesses[currentIndex], rect);
 
         window.setGeometry(QRect(   window.pos().x(), window.pos().y(),
-                                    WIDGET_WIDTH,
+                                    LEFT_OFFSET+WIDGET_WIDTH,
                                     searchBtn.height()+SPACER+INFO_HEIGHT));
 
         connect(pInfoPanel->getGoButton(),      SIGNAL(clicked(bool)), this, SLOT(goClicked()));
@@ -624,7 +625,7 @@ void MainApp::DisplayInformation(bool display, bool RefreshDisplay)
             pInfoPanel = NULL;
         }
         lineEdit.setFocus();
-        window.setGeometry(QRect(window.pos().x(), window.pos().y(), WIDGET_WIDTH, searchBtn.height()));
+        window.setGeometry(QRect(window.pos().x(), window.pos().y(), LEFT_OFFSET+WIDGET_WIDTH, searchBtn.height()));
     }
 
     if (RefreshDisplay && getenv("AGL_NAVI"))
