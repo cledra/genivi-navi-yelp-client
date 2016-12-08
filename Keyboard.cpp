@@ -13,10 +13,10 @@
 
 #define NEXT_ROW_MARKER '\0'
 
-#define SIZE_FACTOR 1
+#define SIZE_FACTOR 1       /* looks nice on AGL demo */
+//#define SIZE_FACTOR 0.5   /* looks nice on PC build */
 
 #define OFFSET_H        ( 78 * SIZE_FACTOR )
-#define OFFSET_COLS     ( 93 * SIZE_FACTOR )
 #define KEY_WIDTH       ( 78 * SIZE_FACTOR )
 #define KEY_HEIGHT      ( 94 * SIZE_FACTOR )
 #define MARGIN_H        ( 12 * SIZE_FACTOR )
@@ -29,7 +29,7 @@ struct KeyboardLayoutEntry
     const char *image;
 };
 
-KeyboardLayoutEntry keyboardLayout[] = {
+static KeyboardLayoutEntry keyboardLayout[] = {
     { '1' , "1.png" },
     { '2' , "2.png" },
     { '3' , "3.png" },
@@ -83,14 +83,14 @@ const static int layoutSize = (sizeof(keyboardLayout) /
                                sizeof(KeyboardLayoutEntry));
 
 Keyboard::Keyboard(QRect r, QWidget *parent):QWidget(parent),background(parent),
-    rect(QRect(r.x() + (r.width()-(r.width()*SIZE_FACTOR))/2, r.y(), r.width()*SIZE_FACTOR, r.height()*SIZE_FACTOR))
+    rect(QRect(r.x() + (r.width()-(r.width()*SIZE_FACTOR))/2, r.y(), r.width()*SIZE_FACTOR, r.height()*SIZE_FACTOR)),
+    mapper(new QSignalMapper(this))
 {
     int nbRowMarkers = 1;
     for (int i = 0; i < layoutSize; ++i)
         if (keyboardLayout[i].key == NEXT_ROW_MARKER)
             nbRowMarkers++;
 
-    QSignalMapper *mapper = new QSignalMapper(this);
     connect(mapper, SIGNAL(mapped(int)), SLOT(buttonClicked(int)));
 
     int row = 0;
@@ -100,8 +100,8 @@ Keyboard::Keyboard(QRect r, QWidget *parent):QWidget(parent),background(parent),
     background.setGeometry(rect);
     QImageReader reader(QString(":/images/background.png"));
     background.setPixmap(QPixmap::fromImage(reader.read()).scaled(rect.width(), rect.height(), Qt::IgnoreAspectRatio));
-    
-    background.setVisible(true);
+
+    background.show();
 
     for (int i = 0; i < layoutSize; ++i)
     {
@@ -122,14 +122,13 @@ Keyboard::Keyboard(QRect r, QWidget *parent):QWidget(parent),background(parent),
             key_width = SPACE_BAR_WIDTH;
         }
 
-        QPushButton *button = new QPushButton(QIcon(tr(":/images/")+QString(keyboardLayout[i].image)), tr(""), parent);
+        QPushButton *button = new QPushButton(QIcon(tr(":/images/")+QString(keyboardLayout[i].image)), tr(""), &background);
         button->setMinimumSize(QSize(key_width, KEY_HEIGHT));
         button->setMaximumSize(QSize(key_width, KEY_HEIGHT));
         button->setIconSize(button->size());
-        button->setGeometry(QRect(  rect.x() + offset_h,
-                                    rect.y() + offset_v,
-                                    button->width(), button->height()));
-        button->setVisible(true);
+        /* geometry of button is relative to its parent, ie 'background' : */
+        button->setGeometry(QRect(offset_h, offset_v, button->width(), button->height()));
+        button->show();
 
         mapper->setMapping(button, keyboardLayout[i].key);
         connect(button, SIGNAL(clicked()), mapper, SLOT(map()));
@@ -144,4 +143,10 @@ void Keyboard::buttonClicked(int key)
         emit specialKeyClicked(key);
     else
         emit keyClicked(QString(key));
+}
+
+Keyboard::~Keyboard()
+{
+    disconnect();
+    delete mapper;
 }

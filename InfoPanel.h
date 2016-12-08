@@ -28,7 +28,6 @@ class InfoPanel
         QPushButton cancelButton;
         QPushButton goButton;
         QNetworkAccessManager networkManager;
-        QFont font, fontBold;
 };
 
 #endif // __INFO_PANEL_H__

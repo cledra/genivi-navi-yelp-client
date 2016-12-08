@@ -4,6 +4,7 @@
 #include <QWidget>
 #include <QLabel>
 #include <QRect>
+#include <QFont>
 #include <QString>
 
 class InfoPanelLabel : public QLabel

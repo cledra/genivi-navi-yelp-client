@@ -29,7 +29,8 @@ class MainApp: public QMainWindow
     private:
         void ParseJsonBusinessList(const char* buf, std::vector<Business> & Output);
         bool eventFilter(QObject *obj, QEvent *ev);
-        void SetDestination();
+        void resizeEvent(QResizeEvent* event);
+        void SetDestination(int index = 0);
         bool IsCoordinatesConsistent(Business & business);
         void DisplayLineEdit(bool display = true);
         void DisplayResultList(bool display, bool RefreshDisplay = true);
@@ -37,17 +38,16 @@ class MainApp: public QMainWindow
         int FillResultList(std::vector<Business> & list, int focusIndex = 0);
 
         GeniviWrapper wrapper;
-        QWidget window;
         QNetworkAccessManager networkManager;
         QPushButton searchBtn;
         QLineEdit lineEdit;
-        QTreeWidget resultList;
-        QMutex mutex; // to protect 'pSearchReply' from concurrent access
+        Keyboard keyboard;
+        QMutex mutex; // to protect pointers from concurrent access
         QString token;
         QString currentSearchText;
         QNetworkReply *pSearchReply;
         InfoPanel *pInfoPanel;
-        Keyboard *pKeyboard;
+        QTreeWidget *pResultList;
         double currentLatitude;
         double currentLongitude;
         uint32_t navicoreSession;
@@ -56,7 +56,9 @@ class MainApp: public QMainWindow
         bool isInfoScreen;
         bool isInputDisplayed;
         bool isKeyboard;
+        bool isAglNavi;
         std::vector<Business> Businesses;
+        QFont font;
 
     private slots:
         void searchBtnClicked();

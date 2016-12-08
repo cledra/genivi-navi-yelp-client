@@ -4,12 +4,14 @@
 #include <QWidget>
 #include <QRect>
 #include <QLabel>
+#include <QSignalMapper>
 
 class Keyboard : public QWidget
 {
     Q_OBJECT
     public:
         explicit Keyboard(QRect r, QWidget *parent = Q_NULLPTR);
+        virtual ~Keyboard();
 
     signals:
         void specialKeyClicked(int key);
@@ -21,6 +23,7 @@ class Keyboard : public QWidget
     private:
         QRect rect;
         QLabel background;
+        QSignalMapper *mapper;
 };
 
 #endif // __KEYBOARD_H__

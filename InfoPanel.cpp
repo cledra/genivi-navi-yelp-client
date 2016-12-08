@@ -1,4 +1,5 @@
 #include <QWidget>
+#include <QFont>
 #include <QNetworkRequest>
 #include <QNetworkReply>
 #include <QEventLoop>
@@ -20,7 +21,6 @@
 #define LABEL_PHONE_HEIGHT      30
 #define LABEL_IMG_HEIGHT        220
 #define LABEL_REVIEWS_HEIGHT    24
-#define MSG_BOX_HEIGHT          70
 
 InfoPanel::InfoPanel(QWidget *parent, Business & business, QRect rect):
             nameLabel(parent, rect),
@@ -35,6 +35,9 @@ InfoPanel::InfoPanel(QWidget *parent, Business & business, QRect rect):
             networkManager(parent)
 {    
     int y = 0;
+    QPixmap pixmap;
+    bool isImageDownloaded = false;
+    QFont font, fontBold;
 
     font = nameLabel.font();
     font.setPointSize(FONT_SIZE);
@@ -42,6 +45,23 @@ InfoPanel::InfoPanel(QWidget *parent, Business & business, QRect rect):
     fontBold = nameLabel.font();
     fontBold.setPointSize(FONT_SIZE_BOLD);
     fontBold.setBold(true);
+
+    /* Preload image Url: */
+    TRACE_INFO("Image URL: %s", qPrintable(business.ImageUrl));
+    QEventLoop eventLoop;
+    QObject::connect(&networkManager, SIGNAL(finished(QNetworkReply*)), &eventLoop, SLOT(quit()));
+    QNetworkRequest req(QUrl(business.ImageUrl));
+    QNetworkReply* reply = networkManager.get(req);
+
+    eventLoop.exec(); // wait for answer
+    if (reply->error() == QNetworkReply::NoError)
+    {
+        QByteArray jpegData = reply->readAll();
+        pixmap.loadFromData(jpegData);
+        isImageDownloaded = true;
+    }
+    networkManager.disconnect();
+    delete reply;
 
     /* Display Name: */
     nameLabel.Init(y, LABEL_NAME_HEIGHT, business.Name, &fontBold);
@@ -58,23 +78,12 @@ InfoPanel::InfoPanel(QWidget *parent, Business & business, QRect rect):
     y += LABEL_PHONE_HEIGHT;
 
     /* Image Url: */
-    TRACE_INFO("Image URL: %s", qPrintable(business.ImageUrl));
-    QEventLoop eventLoop;
-    QObject::connect(&networkManager, SIGNAL(finished(QNetworkReply*)), &eventLoop, SLOT(quit()));
-    QNetworkRequest req(QUrl(business.ImageUrl));
-    QNetworkReply* reply = networkManager.get(req);
-
-    eventLoop.exec(); // wait for answer
-    if (reply->error() == QNetworkReply::NoError)
+    imageLabel.Init(y, LABEL_IMG_HEIGHT, QString(""));
+    y += LABEL_IMG_HEIGHT;
+    if (isImageDownloaded)
     {
-        QByteArray jpegData = reply->readAll();
-        QPixmap pixmap;
-        pixmap.loadFromData(jpegData);
-        imageLabel.Init(y, LABEL_IMG_HEIGHT, QString(""));
-        y += LABEL_IMG_HEIGHT;
         imageLabel.setPixmap(pixmap.scaled(QSize(rect.width(), LABEL_IMG_HEIGHT-6), Qt::KeepAspectRatio));
     }
-    delete reply;
 
     /* Display number of reviews: */
     nbReviewsLabel.Init(y, LABEL_REVIEWS_HEIGHT, QString("Number of reviews : %1").arg(business.ReviewCount), &font);

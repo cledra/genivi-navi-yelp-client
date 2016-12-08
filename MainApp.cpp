@@ -28,30 +28,38 @@
 #define BIG_BUFFER_SIZE     (1024*1024)
 #define LEFT_OFFSET         28
 #define FONT_SIZE_LINEDIT   20
-#define FONT_SIZE_LIST      14
+#define FONT_SIZE_LIST      18
 #define TEXT_INPUT_WIDTH    500
 #define SEARCH_BTN_SIZE     105
 #define SPACER              15
 #define WIDGET_WIDTH        (SEARCH_BTN_SIZE + SPACER + TEXT_INPUT_WIDTH)
-#define RESULT_LIST_WIDTH   TEXT_INPUT_WIDTH
-#define RESULT_LIST_HEIGHT  480
+#define DISPLAY_WIDTH   	TEXT_INPUT_WIDTH
+#define DISPLAY_HEIGHT  	480
+#define COMPLETE_W_WITH_KB	1080
+#define COMPLETE_H_WITH_KB	1408
 #define RESULT_ITEM_HEIGHT  80
-#define INFO_WIDTH          TEXT_INPUT_WIDTH
-#define INFO_HEIGHT         480
 #define MARGINS             25
+#define AGL_REFRESH_DELAY   75 /* milliseconds */
+
+#define SCROLLBAR_STYLE \
+"QScrollBar:vertical {" \
+"    border: 2px solid grey;" \
+"    background: gray;" \
+"    width: 45px;" \
+"}"
 
 using namespace std;
 
-MainApp::MainApp():
-    wrapper(),window(Q_NULLPTR, Qt::FramelessWindowHint),
-    networkManager(this),searchBtn(QIcon(tr(":/images/loupe-90.png")), tr(""), &window),
-    lineEdit(&window),resultList(&window),mutex(QMutex::Recursive),token(""),currentSearchText(""),
-    pSearchReply(NULL),pInfoPanel(NULL),pKeyboard(NULL),currentLatitude(0.0),currentLongitude(0.0),
+MainApp::MainApp():QMainWindow(Q_NULLPTR, Qt::FramelessWindowHint),
+    wrapper(),networkManager(this),searchBtn(QIcon(tr(":/images/loupe-90.png")), tr(""), this),
+    lineEdit(this),keyboard(QRect(0, 688, COMPLETE_W_WITH_KB, 720), this),
+    mutex(QMutex::Recursive),token(""),currentSearchText(""),
+    pSearchReply(NULL),pInfoPanel(NULL),pResultList(NULL),currentLatitude(0.0),currentLongitude(0.0),
     navicoreSession(0),currentIndex(0),fontId(-1),isInfoScreen(false),
-    isInputDisplayed(false), isKeyboard(false)
+    isInputDisplayed(false),isKeyboard(false),isAglNavi(false)
 {
-    window.setAttribute(Qt::WA_TranslucentBackground);
-    window.setStyleSheet("border: none;");
+    this->setAttribute(Qt::WA_TranslucentBackground);
+    this->setStyleSheet("border: none;");
 
     searchBtn.setStyleSheet("border: none;");
     searchBtn.setMinimumSize(QSize(SEARCH_BTN_SIZE, SEARCH_BTN_SIZE));
@@ -62,25 +70,13 @@ MainApp::MainApp():
     lineEdit.setMinimumSize(QSize(TEXT_INPUT_WIDTH, SEARCH_BTN_SIZE));
 
     lineEdit.setPlaceholderText(QString(DEFAULT_TEXT));
-    QFont font = lineEdit.font();
+    font = lineEdit.font();
     font.setPointSize(FONT_SIZE_LINEDIT);
     lineEdit.setFont(font);
     lineEdit.setTextMargins(MARGINS/2, 0, 0, 0);
     lineEdit.installEventFilter(this);
+    lineEdit.setGeometry(QRect(LEFT_OFFSET + searchBtn.width() + SPACER, 0, lineEdit.width(), lineEdit.height()));
     lineEdit.setVisible(false);
-
-    resultList.setStyleSheet("border: none;");
-    resultList.setRootIsDecorated(false);
-    resultList.setEditTriggers(QTreeWidget::NoEditTriggers);
-    resultList.setSelectionBehavior(QTreeWidget::SelectRows);
-    resultList.setFrameStyle(QFrame::Box | QFrame::Plain);
-    resultList.setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
-    resultList.setVerticalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
-    resultList.header()->hide();
-    font.setPointSize(FONT_SIZE_LIST);
-    resultList.setFont(font);
-    resultList.installEventFilter(this);
-    resultList.setVisible(false);
 
     /* We might need a Japanese font: */
     QFile fontFile(":/fonts/DroidSansJapanese.ttf");
@@ -97,9 +93,14 @@ MainApp::MainApp():
             TRACE_ERROR("QFontDatabase::addApplicationFontFromData failed");
         }
     }
+    
+    /* Check if "AGL_NAVI" env variable is set. If yes, we must notify
+     * AGL environment when surface needs to be resized */
+    if (getenv("AGL_NAVI"))
+		isAglNavi = true;
 
-    window.setGeometry(QRect(window.pos().x(), window.pos().y(), LEFT_OFFSET + searchBtn.width(), searchBtn.height()));
-    window.show();
+    this->setGeometry(QRect(this->pos().x(), this->pos().y(), LEFT_OFFSET + searchBtn.width(), searchBtn.height()));
+    this->show();
 }
 
 MainApp::~MainApp()
@@ -107,9 +108,14 @@ MainApp::~MainApp()
     mutex.lock();
     if (fontId >= 0)
         QFontDatabase::removeApplicationFont(fontId);
+
+    searchBtn.disconnect();
+    lineEdit.disconnect();
+    networkManager.disconnect();
+    keyboard.disconnect();
+        
     delete pSearchReply;
     delete pInfoPanel;
-    delete pKeyboard;
     mutex.unlock();
 }
 
@@ -126,49 +132,31 @@ void MainApp::DisplayLineEdit(bool display)
     if (display)
     {
         if (isKeyboard)
-        {
-            lineEdit.setGeometry(QRect(LEFT_OFFSET + searchBtn.width() + SPACER, 0, lineEdit.width(), lineEdit.height()));
-            lineEdit.setVisible(true);
-            window.setGeometry(QRect(window.pos().x(), window.pos().y(), 1080, 1408));
-
-            if (!pKeyboard)
-            {
-                TRACE_DEBUG("new keyboard");
-                pKeyboard = new Keyboard(QRect(0, 688, 1080, 720), &window);
-                connect(pKeyboard, SIGNAL(keyClicked(const QString &)), this, SLOT(textAdded(const QString &)));
-                connect(pKeyboard, SIGNAL(specialKeyClicked(int)), this, SLOT(keyPressed(int)));
-            }
-        }
+            this->setGeometry(QRect(this->pos().x(), this->pos().y(), COMPLETE_W_WITH_KB, COMPLETE_H_WITH_KB));
         else
-        {
-            lineEdit.setGeometry(QRect(LEFT_OFFSET + searchBtn.width() + SPACER, 0, lineEdit.width(), lineEdit.height()));
-            lineEdit.setVisible(true);
-            window.setGeometry(QRect(window.pos().x(), window.pos().y(), LEFT_OFFSET + WIDGET_WIDTH, searchBtn.height()));
-        }
+            this->setGeometry(QRect(this->pos().x(), this->pos().y(), LEFT_OFFSET + WIDGET_WIDTH, searchBtn.height()));
 
+        lineEdit.setVisible(true);
         lineEdit.setFocus();
     }
     else
     {
-        if (isKeyboard && pKeyboard)
+        if (pResultList)
         {
-            TRACE_DEBUG("delete keyboard");
-            delete pKeyboard;
-            pKeyboard = NULL;
+            pResultList->removeEventFilter(this);
+            delete pResultList;
+            pResultList = NULL;
         }
-        DisplayResultList(false, false);
-        DisplayInformation(false, false);
+        if (pInfoPanel)
+        {
+            delete pInfoPanel;
+            pInfoPanel = NULL;
+        }
         lineEdit.setText(tr(""));
         lineEdit.setVisible(false);
-        window.setGeometry(QRect(window.pos().x(), window.pos().y(), LEFT_OFFSET+searchBtn.width(), searchBtn.height()));
+        this->setGeometry(QRect(this->pos().x(), this->pos().y(), LEFT_OFFSET+searchBtn.width(), searchBtn.height()));
     }
     isInputDisplayed = display;
-
-    if (getenv("AGL_NAVI"))
-    {
-        QTimer timer(this);
-        timer.singleShot(100, this, SLOT(UpdateAglSurfaces()));
-    }
     
     mutex.unlock();
 }
@@ -177,13 +165,13 @@ void MainApp::UpdateAglSurfaces()
 {
     char cmd[1024];
 
-    TRACE_DEBUG("handle AGL demo surfaces...");
+    TRACE_DEBUG("handle AGL demo surfaces (new surface is bigger)");
     snprintf(cmd, 1023, "/usr/bin/LayerManagerControl set surface $SURFACE_ID_CLIENT source region 0 0 %d %d",
-        window.width(), window.height());
+        this->width(), this->height());
     TRACE_DEBUG("%s", cmd);
     system(cmd);
     snprintf(cmd, 1023, "/usr/bin/LayerManagerControl set surface $SURFACE_ID_CLIENT destination region $CLIENT_X $CLIENT_Y %d %d",
-        window.width(), window.height());
+        this->width(), this->height());
     TRACE_DEBUG("%s", cmd);
     system(cmd);
 }
@@ -191,33 +179,59 @@ void MainApp::UpdateAglSurfaces()
 void MainApp::DisplayResultList(bool display, bool RefreshDisplay)
 {
     mutex.lock();
+
     if (display)
     {
-        resultList.setGeometry(QRect(   LEFT_OFFSET+searchBtn.width()+SPACER, searchBtn.height()+SPACER,
-                                        RESULT_LIST_WIDTH, RESULT_LIST_HEIGHT));
-        if (isKeyboard)
-            window.setGeometry(QRect(window.pos().x(), window.pos().y(), 1080, 1408));
-        else
-            window.setGeometry(QRect(   window.pos().x(), window.pos().y(),
-                                        LEFT_OFFSET+WIDGET_WIDTH,
-                                        searchBtn.height()+SPACER+resultList.height()));
-        resultList.setVisible(true);
-        resultList.setFocus();
+        if (!pResultList)
+        {
+            pResultList = new QTreeWidget(this);
+            pResultList->setStyleSheet("border: none;");
+            pResultList->setRootIsDecorated(false);
+            pResultList->setEditTriggers(QTreeWidget::NoEditTriggers);
+            pResultList->setSelectionBehavior(QTreeWidget::SelectRows);
+            pResultList->setFrameStyle(QFrame::Box | QFrame::Plain);
+            pResultList->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+            //pResultList->setVerticalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+            pResultList->setAttribute(Qt::WA_AcceptTouchEvents);
+            pResultList->verticalScrollBar()->setStyleSheet(SCROLLBAR_STYLE);
+            pResultList->header()->hide();
+            //font.setPointSize(FONT_SIZE_LIST);
+            //pResultList->setFont(font);
+            pResultList->installEventFilter(this);
+        }
+        
+        pResultList->setGeometry(QRect(   LEFT_OFFSET+searchBtn.width()+SPACER, searchBtn.height()+SPACER,
+                                        DISPLAY_WIDTH, DISPLAY_HEIGHT));
+        if (RefreshDisplay)
+        {
+			if (isKeyboard)
+				this->setGeometry(QRect(this->pos().x(), this->pos().y(), COMPLETE_W_WITH_KB, COMPLETE_H_WITH_KB));
+			else
+				this->setGeometry(QRect(this->pos().x(), this->pos().y(),
+										LEFT_OFFSET+WIDGET_WIDTH,
+										searchBtn.height()+SPACER+pResultList->height()));
+		}
+        pResultList->setVisible(true);
+        pResultList->setFocus();
     }
     else
     {
-        resultList.setVisible(false);
-        lineEdit.setFocus();
-        if (isKeyboard)
-            window.setGeometry(QRect(window.pos().x(), window.pos().y(), 1080, 1408));
-        else
-            window.setGeometry(QRect(window.pos().x(), window.pos().y(), LEFT_OFFSET+WIDGET_WIDTH, searchBtn.height()));
-    }
+        if (pResultList)
+        {
+            pResultList->removeEventFilter(this);
+            pResultList->deleteLater();
+            pResultList = NULL;
+        }
 
-    if (RefreshDisplay && getenv("AGL_NAVI"))
-    {
-        QTimer timer(this);
-        timer.singleShot(100, this, SLOT(UpdateAglSurfaces()));
+        lineEdit.setFocus();
+        
+        if (RefreshDisplay)
+        {
+			if (isKeyboard)
+				this->setGeometry(QRect(this->pos().x(), this->pos().y(), COMPLETE_W_WITH_KB, COMPLETE_H_WITH_KB));
+			else
+				this->setGeometry(QRect(this->pos().x(), this->pos().y(), LEFT_OFFSET+WIDGET_WIDTH, searchBtn.height()));
+		}
     }
     
     mutex.unlock();
@@ -306,7 +320,7 @@ void MainApp::itemClicked()
     mutex.lock();
     if (isInfoScreen)
     {
-        DisplayInformation(true);
+        DisplayInformation(true, false);
     }
     else
     {
@@ -457,9 +471,11 @@ void MainApp::ParseJsonBusinessList(const char* buf, std::vector<Business> & Out
 
 bool MainApp::eventFilter(QObject *obj, QEvent *ev)
 {
+    bool ret = false;
+
     mutex.lock();
 
-    if (obj == &resultList)
+    if (obj == pResultList)
     {
         //TRACE_DEBUG("ev->type() = %d", (int)ev->type());
 
@@ -517,38 +533,53 @@ bool MainApp::eventFilter(QObject *obj, QEvent *ev)
             {
                 case Qt::Key_Escape:
                     TRACE_DEBUG("Escape !");
-                    DisplayInformation(false);
+                    DisplayInformation(false, false);
                     DisplayResultList(true);
+                    FillResultList(Businesses, currentIndex);
                     break;
                 case Qt::Key_Enter:
                 case Qt::Key_Return:
                     TRACE_DEBUG("Go !");
-                    SetDestination();
+                    SetDestination(currentIndex);
                     DisplayLineEdit(false);
                     break;
                 default: break;
             }
         }
     }
+    else
+    {
+        ret = QMainWindow::eventFilter(obj, ev);
+    }
     mutex.unlock();
-    return false;
+    return ret;
 }
 
-void MainApp::SetDestination()
+void MainApp::resizeEvent(QResizeEvent* event)
+{
+	QMainWindow::resizeEvent(event);
+    if (isAglNavi)
+    {
+        QTimer::singleShot(AGL_REFRESH_DELAY, Qt::CoarseTimer, this, SLOT(UpdateAglSurfaces()));
+    }
+}
+
+void MainApp::SetDestination(int index)
 {
     mutex.lock();
-    /* params are only used if no item is selected in pResultList. */
 
-    QList<QTreeWidgetItem *> SelectedItems = resultList.selectedItems();
-    if (SelectedItems.size() <= 0)
+    /* if pResultList exists, take the selected index
+     * otherwise, take the index given as parameter */
+    if (pResultList)
     {
-        TRACE_INFO("no item is selected");
-        mutex.unlock();
-        return;
+        QList<QTreeWidgetItem *> SelectedItems = pResultList->selectedItems();
+        if (SelectedItems.size() > 0)
+        {
+            /* select the first selected item : */
+            index = pResultList->indexOfTopLevelItem(*SelectedItems.begin());
+        }
     }
 
-    /* select the first selected item : */
-    int index = resultList.indexOfTopLevelItem(*SelectedItems.begin());
     TRACE_DEBUG("index is: %d", index);
 
     /* retrieve the coordinates of this item : */
@@ -590,29 +621,45 @@ void MainApp::SetDestination()
 
 void MainApp::DisplayInformation(bool display, bool RefreshDisplay)
 {
+    mutex.lock();
     if (display)
     {
-        QList<QTreeWidgetItem *> SelectedItems = resultList.selectedItems();
+        /* pResultList must exist, so that we can retrieve the selected index: */
+        if (!pResultList)
+        {
+            TRACE_ERROR("pResultList is null");
+            mutex.unlock();
+            return;
+        }
+
+        QList<QTreeWidgetItem *> SelectedItems = pResultList->selectedItems();
         if (SelectedItems.size() <= 0)
         {
             TRACE_ERROR("no item is selected");
+            mutex.unlock();
             return;
         }
 
         /* select the first selected item : */
-        currentIndex = resultList.indexOfTopLevelItem(*SelectedItems.begin());
+        currentIndex = pResultList->indexOfTopLevelItem(*SelectedItems.begin());
 
         /* Resize window: */
-        DisplayResultList(false);
+        DisplayResultList(false, false);
 
         /* Display info for the selected item: */
         QRect rect( LEFT_OFFSET+searchBtn.width()+SPACER, searchBtn.height()+SPACER,
-                    INFO_WIDTH, INFO_HEIGHT);
-        pInfoPanel = new InfoPanel(&window, Businesses[currentIndex], rect);
+                    DISPLAY_WIDTH, DISPLAY_HEIGHT);
+        pInfoPanel = new InfoPanel(this, Businesses[currentIndex], rect);
 
-        window.setGeometry(QRect(   window.pos().x(), window.pos().y(),
-                                    LEFT_OFFSET+WIDGET_WIDTH,
-                                    searchBtn.height()+SPACER+INFO_HEIGHT));
+		if (RefreshDisplay)
+		{
+			if (isKeyboard)
+				this->setGeometry(QRect(this->pos().x(), this->pos().y(), COMPLETE_W_WITH_KB, COMPLETE_H_WITH_KB));
+			else
+				this->setGeometry(QRect(	this->pos().x(), this->pos().y(),
+											LEFT_OFFSET+WIDGET_WIDTH,
+											searchBtn.height()+SPACER+DISPLAY_HEIGHT));
+		}
 
         connect(pInfoPanel->getGoButton(),      SIGNAL(clicked(bool)), this, SLOT(goClicked()));
         connect(pInfoPanel->getCancelButton(),  SIGNAL(clicked(bool)), this, SLOT(cancelClicked()));
@@ -621,18 +668,18 @@ void MainApp::DisplayInformation(bool display, bool RefreshDisplay)
     {
         if (pInfoPanel)
         {
+            pInfoPanel->getGoButton()->disconnect();
+            pInfoPanel->getCancelButton()->disconnect();
             delete pInfoPanel;
             pInfoPanel = NULL;
         }
         lineEdit.setFocus();
-        window.setGeometry(QRect(window.pos().x(), window.pos().y(), LEFT_OFFSET+WIDGET_WIDTH, searchBtn.height()));
+        
+        if (RefreshDisplay)
+			this->setGeometry(QRect(this->pos().x(), this->pos().y(), LEFT_OFFSET+WIDGET_WIDTH, searchBtn.height()));
     }
 
-    if (RefreshDisplay && getenv("AGL_NAVI"))
-    {
-        QTimer timer(this);
-        timer.singleShot(100, this, SLOT(UpdateAglSurfaces()));
-    }
+    mutex.unlock();
 }
 
 void MainApp::networkReplySearch(QNetworkReply* reply)
@@ -671,14 +718,15 @@ void MainApp::networkReplySearch(QNetworkReply* reply)
     mutex.unlock();
 }
 
+/* pResultList must be allocated at this point ! */
 int MainApp::FillResultList(vector<Business> & list, int focusIndex)
 {
     int nbElem = 0;
 
     mutex.lock();
 
-    resultList.setUpdatesEnabled(false);
-    resultList.clear();
+    pResultList->setUpdatesEnabled(false);
+    pResultList->clear();
 
     /* filling the dropdown menu: */
     for (vector<Business>::iterator it = list.begin(); it != list.end(); it++)
@@ -690,23 +738,30 @@ int MainApp::FillResultList(vector<Business> & list, int focusIndex)
             continue;
         }
 
-        QTreeWidgetItem * item = new QTreeWidgetItem(&resultList);
-        ClickableLabel *label = new ClickableLabel("<b>"+(*it).Name+"</b><br>"+(*it).Address+", "+(*it).City+", "+
-            (*it).State+" "+(*it).ZipCode+", "+(*it).Country);
+        QTreeWidgetItem * item = new QTreeWidgetItem(pResultList);
+
+        ClickableLabel *label = new ClickableLabel("<b>"+(*it).Name+
+			"</b><br>"+(*it).Address+", "+(*it).City+", "+(*it).State+
+			" "+(*it).ZipCode+", "+(*it).Country, pResultList);
         label->setTextFormat(Qt::RichText);
+        font.setPointSize(FONT_SIZE_LIST);
+        label->setFont(font);
         label->setIndent(MARGINS);
+        label->setAttribute(Qt::WA_AcceptTouchEvents);
         item->setSizeHint(0, QSize(TEXT_INPUT_WIDTH, RESULT_ITEM_HEIGHT));
-        resultList.setItemWidget(item, 0, label);
+        pResultList->setItemWidget(item, 0, label);
         connect(label, SIGNAL(clicked()), this, SLOT(itemClicked()));
+
+        //item->setText(0, (*it).Name);
 
         if (nbElem == focusIndex)
         {
-            resultList.setCurrentItem(item); 
+            pResultList->setCurrentItem(item);
         }
         nbElem++;
     }
 
-    resultList.setUpdatesEnabled(true);
+    pResultList->setUpdatesEnabled(true);
 
     mutex.unlock();
     return nbElem;
@@ -873,20 +928,23 @@ int MainApp::StartMonitoringUserInput()
     connect(&searchBtn, SIGNAL(clicked(bool)), this, SLOT(searchBtnClicked()));
     connect(&lineEdit, SIGNAL(textChanged(const QString &)), this, SLOT(textChanged(const QString &)));
     connect(&networkManager, SIGNAL(finished(QNetworkReply*)), this, SLOT(networkReplySearch(QNetworkReply*)));
+    connect(&keyboard, SIGNAL(keyClicked(const QString &)), this, SLOT(textAdded(const QString &)));
+    connect(&keyboard, SIGNAL(specialKeyClicked(int)), this, SLOT(keyPressed(int)));
     return 1;
 }
 
 void MainApp::goClicked()
 {
     TRACE_DEBUG("Go clicked !");
-    SetDestination();
+    SetDestination(currentIndex);
     DisplayLineEdit(false);
 }
 
 void MainApp::cancelClicked()
 {
     TRACE_DEBUG("Cancel clicked !");
-    DisplayInformation(false);
-    DisplayResultList(true);
+    DisplayInformation(false, false);
+    DisplayResultList(true, false);
     FillResultList(Businesses, currentIndex);
 }
+
